@@ -121,7 +121,7 @@ class _TestModelScreenState extends State<TestModelScreen> {
 
     try {
       // ⚠️ IP ADDRESS: Use 10.0.2.2 for Emulator, or your PC's LAN IP (e.g. 192.168.1.X) for real device
-      var uri = Uri.parse('http://192.168.1.58:8000/analyze/');
+      var uri = Uri.parse('http://10.0.2.2:8000/analyze/');
 
       var request = http.MultipartRequest('POST', uri);
       request.files.add(await http.MultipartFile.fromPath('file', _audioPath!));
