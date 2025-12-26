@@ -6,6 +6,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:record/record.dart';
 import 'dart:convert';
+import 'package:flutter_dotenv/flutter_dotenv.dart'; // IMPORT THIS
 
 // --- 1. DATA MODELS ---
 class QuickAnalysis {
@@ -120,8 +121,17 @@ class _TestModelScreenState extends State<TestModelScreen> {
     setState(() { _isLoading = true; _statusMessage = "Analyzing..."; });
 
     try {
-      // ⚠️ IP ADDRESS: Use 10.0.2.2 for Emulator, or your PC's LAN IP (e.g. 192.168.1.X) for real device
-      var uri = Uri.parse('http://192.168.1.58:8000/analyze/');
+      // 1. GET URL FROM ENV FILE
+      String? baseUrl = dotenv.env['API_URL'];
+
+      if (baseUrl == null || baseUrl.isEmpty) {
+        setState(() => _statusMessage = "Error: API_URL not found in .env file");
+        _isLoading = false;
+        return;
+      }
+
+      // 2. Build the full endpoint
+      var uri = Uri.parse('$baseUrl/analyze/');
 
       var request = http.MultipartRequest('POST', uri);
       request.files.add(await http.MultipartFile.fromPath('file', _audioPath!));
@@ -243,7 +253,6 @@ class _TestModelScreenState extends State<TestModelScreen> {
               const Divider(thickness: 2),
               const SizedBox(height: 10),
 
-              // SCORE CIRCLE (FIXED)
               Center(
                 child: Column(
                   children: [
