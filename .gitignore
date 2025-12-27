@@ -47,3 +47,4 @@ app.*.map.json
 # --- FIREBASE SECRETS ---
 # Android
 android/app/google-services.json
+.env
