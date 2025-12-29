@@ -71,7 +71,6 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await dotenv.load(fileName: ".env");
-  // print("Env loaded successfully");
   await Firebase.initializeApp();
   runApp(const MaterialApp(
     debugShowCheckedModeBanner: false,

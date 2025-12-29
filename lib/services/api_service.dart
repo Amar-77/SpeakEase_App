@@ -1,34 +1,27 @@
-import 'dart:io';
-import 'package:http/http.dart' as http;
 import 'dart:convert';
-import '../models/analysis_model.dart';
+import 'package:http/http.dart' as http;
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import '../models/analysis_model.dart'; // Make sure you move your QuickAnalysis/WordAnalysis classes to a separate file, or define them here.
 
 class ApiService {
-  // ⚠️ CHANGE THIS IP depending on where you run the app!
-  // Android Emulator: 'http://10.0.2.2:8000/analyze/'
-  // Physical Device: 'http://192.168.1.X:8000/analyze/' (Check your PC settings)
-  static const String _baseUrl = 'http://10.0.2.2:8000/analyze/';
-
-  Future<AnalysisResponse?> analyzeAudio(String filePath, String correctText) async {
+  Future<Map<String, dynamic>?> analyzeAudio(String filePath, String refText) async {
     try {
-      var request = http.MultipartRequest('POST', Uri.parse(_baseUrl));
+      String? baseUrl = dotenv.env['API_URL'];
+      if (baseUrl == null) return null;
 
-      // 1. Add the Audio File
+      var uri = Uri.parse('$baseUrl/analyze/');
+      var request = http.MultipartRequest('POST', uri);
+
       request.files.add(await http.MultipartFile.fromPath('file', filePath));
+      request.fields['correct_text'] = refText;
 
-      // 2. Add the Text
-      request.fields['correct_text'] = correctText;
-
-      // 3. Send
       var streamedResponse = await request.send();
       var response = await http.Response.fromStream(streamedResponse);
 
       if (response.statusCode == 200) {
-        // 4. Decode JSON
-        var jsonData = json.decode(response.body);
-        return AnalysisResponse.fromJson(jsonData);
+        return json.decode(response.body);
       } else {
-        print("Server Error: ${response.statusCode} - ${response.body}");
+        print("Server Error: ${response.body}");
         return null;
       }
     } catch (e) {

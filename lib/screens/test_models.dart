@@ -440,8 +440,6 @@ class _TestModelScreenState extends State<TestModelScreen> {
 
     try {
       // 1. GET URL FROM ENV FILE
-      print("API_URL => ${dotenv.env['API_URL']}");
-
       String? baseUrl = dotenv.env['API_URL'];
 
       if (baseUrl == null || baseUrl.isEmpty) {

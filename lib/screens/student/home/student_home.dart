@@ -173,9 +173,9 @@ class StudentHome extends StatelessWidget {
                       child: InkWell(
                         onTap: () {
 
-                          Navigator.push(context, MaterialPageRoute(builder: (_) => TestModelScreen()));
+                          //Navigator.push(context, MaterialPageRoute(builder: (_) => TestModelScreen()));
 
-                          //Navigator.push(context, MaterialPageRoute(builder: (_) => PracticeSessionList(classId: data['class_id'] ?? '')));
+                          Navigator.push(context, MaterialPageRoute(builder: (_) => PracticeSessionList(classId: data['class_id'] ?? '')));
                         },
                         child: Container(
                           height: 120,
