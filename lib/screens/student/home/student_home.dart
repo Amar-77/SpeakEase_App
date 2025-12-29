@@ -3,7 +3,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:speakease/screens/test_models.dart';
 import '../practice/practice_list_screen.dart';
-import '../dashboard/student_dashboard_screen.dart'; // New Import
+import '../dashboard/student_dashboard_screen.dart';
+import 'leaderboard_screen.dart'; // <--- NEW IMPORT
 
 class StudentHome extends StatelessWidget {
   const StudentHome({super.key});
@@ -32,14 +33,15 @@ class StudentHome extends StatelessWidget {
 
           var data = snapshot.data!.data() as Map<String, dynamic>;
 
-          // --- Fetch Gamification Data (Defaulting to 0 if missing) ---
+          // --- Fetch Gamification Data ---
           int coins = data['speech_coins'] ?? 0;
           int level = data['level'] ?? 1;
           int currentXp = data['current_xp'] ?? 0;
           int maxXp = data['max_xp'] ?? 1200;
           int streak = data['current_streak'] ?? 0;
+          String classId = data['class_id'] ?? 'class_6A'; // Needed for Leaderboard
 
-          double progress = currentXp / maxXp; // For the progress bar (0.0 to 1.0)
+          double progress = currentXp / maxXp;
 
           return SingleChildScrollView(
             padding: const EdgeInsets.all(20.0),
@@ -96,9 +98,7 @@ class StudentHome extends StatelessWidget {
                           )
                         ],
                       ),
-
                       const SizedBox(height: 20),
-
                       // XP Progress Bar
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -122,11 +122,9 @@ class StudentHome extends StatelessWidget {
                           ),
                         ],
                       ),
-
                       const SizedBox(height: 15),
                       const Divider(color: Colors.white24),
                       const SizedBox(height: 5),
-
                       // Wallet
                       Row(
                         mainAxisAlignment: MainAxisAlignment.end,
@@ -143,9 +141,9 @@ class StudentHome extends StatelessWidget {
                 const SizedBox(height: 30),
 
                 // --- 2. ACTION GRID ---
+                // Row 1: Analytics & Practice
                 Row(
                   children: [
-                    // Detailed Dashboard Button
                     Expanded(
                       child: InkWell(
                         onTap: () {
@@ -168,14 +166,11 @@ class StudentHome extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 15),
-                    // Start Practice Button
                     Expanded(
                       child: InkWell(
                         onTap: () {
-
-                          Navigator.push(context, MaterialPageRoute(builder: (_) => TestModelScreen()));
-
-                          //Navigator.push(context, MaterialPageRoute(builder: (_) => PracticeSessionList(classId: data['class_id'] ?? '')));
+                          //Navigator.push(context, MaterialPageRoute(builder: (_) => TestModelScreen()));
+                          Navigator.push(context, MaterialPageRoute(builder: (_) => PracticeSessionList(classId: classId)));
                         },
                         child: Container(
                           height: 120,
@@ -195,6 +190,56 @@ class StudentHome extends StatelessWidget {
                     ),
                   ],
                 ),
+
+                const SizedBox(height: 15),
+
+                // --- NEW BUTTON: LEADERBOARD ---
+                // I added this as a full-width card to make it stand out
+                InkWell(
+                  onTap: () {
+                    // Navigate to Leaderboard, passing the classId
+                    Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) => LeaderboardScreen(classId: classId)
+                        )
+                    );
+                  },
+                  child: Container(
+                    height: 100,
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFF9C4), // Light Yellow (Gold-ish)
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: Colors.amber.shade200, width: 1),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: const BoxDecoration(
+                            color: Colors.white,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.emoji_events, size: 30, color: Colors.amber),
+                        ),
+                        const SizedBox(width: 20),
+                        const Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text("Class Leaderboard", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.black87)),
+                            Text("See who is top of the class!", style: TextStyle(color: Colors.black54, fontSize: 14)),
+                          ],
+                        ),
+                        const Spacer(),
+                        const Icon(Icons.arrow_forward_ios, color: Colors.black26, size: 18),
+                      ],
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 30), // Bottom padding
               ],
             ),
           );
