@@ -60,7 +60,7 @@ class StudentDashboardScreen extends StatelessWidget {
                           _buildBar("Wed", weeklyData['Wed'] ?? 0, maxVal, Colors.blue),
                           _buildBar("Thu", weeklyData['Thu'] ?? 0, maxVal, Colors.blue),
                           _buildBar("Fri", weeklyData['Fri'] ?? 0, maxVal, Colors.blue),
-                          _buildBar("Sat", weeklyData['Sat'] ?? 0, maxVal, Colors.orange), // Weekends
+                          _buildBar("Sat", weeklyData['Sat'] ?? 0, maxVal, Colors.red), // Weekends
                           _buildBar("Sun", weeklyData['Sun'] ?? 0, maxVal, Colors.orange),
                         ],
                       ),
