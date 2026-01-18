@@ -123,7 +123,7 @@ class DetailedResultView extends StatelessWidget {
   Color _getScoreColor(double score) => score >= 80 ? Colors.green : (score >= 50 ? Colors.orange : Colors.red);
 
   Widget _buildRichTextTranscription(List<dynamic> words) {
-    if (words.isEmpty) return const Text("No details available.");
+    if (words.isEmpty) return const Text("No details are available.");
 
     return RichText(
       text: TextSpan(
