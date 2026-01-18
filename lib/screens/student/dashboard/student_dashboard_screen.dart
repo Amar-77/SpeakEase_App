@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:intl/intl.dart'; // Add this to pubspec.yaml if needed, or use basic logic
+import 'package:intl/intl.dart';
+import 'package:speakease/screens/student/dashboard/weekly_summary.dart'; // Add this to pubspec.yaml if needed, or use basic logic
 
 class StudentDashboardScreen extends StatelessWidget {
   const StudentDashboardScreen({super.key});
@@ -77,6 +78,25 @@ class StudentDashboardScreen extends StatelessWidget {
                   ),
                 );
               },
+            ),
+
+            // Inside StudentDashboardScreen Column, below the Weekly Report Card
+            const SizedBox(height: 20),
+            ElevatedButton.icon(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const WeeklySummaryScreen()),
+                );
+              },
+              icon: const Icon(Icons.summarize_rounded),
+              label: const Text("View Weekly Summary"),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue.shade700,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 15),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+              ),
             ),
 
             const SizedBox(height: 30),
