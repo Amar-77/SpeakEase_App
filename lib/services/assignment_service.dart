@@ -6,6 +6,8 @@ class AssignmentService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
   // --- 1. CREATE ASSIGNMENT ---
+  // The notification is now handled automatically by Cloud Functions
+  // whenever a new document is added to the 'assignments' collection.
   Future<String?> createAssignment({
     required String title,
     required String content,
@@ -31,22 +33,22 @@ class AssignmentService {
         'created_at': FieldValue.serverTimestamp(),
       });
 
-      return null; // Success
+      return null; // Success (Cloud Function triggers instantly on the server)
     } catch (e) {
+      print("Error creating assignment: $e");
       return e.toString();
     }
   }
 
-  // --- 2. UPDATE ASSIGNMENT (The new part) ---
+  // --- 2. UPDATE ASSIGNMENT ---
   Future<String?> updateAssignment({
-    required String docId, // We need to know WHICH document to update
+    required String docId,
     required String title,
     required String content,
     required String difficulty,
     required String category,
   }) async {
     try {
-      // Recalculate points in case difficulty changed (e.g. Easy -> Hard)
       int points = _calculatePoints(difficulty);
 
       await _firestore.collection('assignments').doc(docId).update({
@@ -55,12 +57,12 @@ class AssignmentService {
         'difficulty': difficulty,
         'category': category,
         'points': points,
-        // We add this field so we know it was edited
         'updated_at': FieldValue.serverTimestamp(),
       });
 
       return null; // Success
     } catch (e) {
+      print("Error updating assignment: $e");
       return e.toString();
     }
   }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:intl/intl.dart';
 
 class WeeklySummaryScreen extends StatelessWidget {
   const WeeklySummaryScreen({super.key});
@@ -200,9 +201,15 @@ class WeeklySummaryScreen extends StatelessWidget {
           var d = doc.data() as Map<String, dynamic>;
           String dateStr = d['date'] ?? "";
           if (dateStr.isNotEmpty) {
-            DateTime dt = DateTime.parse(dateStr);
-            String dayName = ["", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][dt.weekday];
-            weekData[dayName] = d['minutes_spent'] ?? 0;
+            try {
+              // FIX: Use DateFormat to handle single-digit months/days (e.g. 2026-1-18)
+              DateTime dt = DateFormat("yyyy-M-d").parse(dateStr);
+
+              String dayName = ["", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][dt.weekday];
+              weekData[dayName] = d['minutes_spent'] ?? 0;
+            } catch (e) {
+              debugPrint("Error parsing date: $dateStr - $e");
+            }
           }
         }
 
@@ -212,7 +219,9 @@ class WeeklySummaryScreen extends StatelessWidget {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             crossAxisAlignment: CrossAxisAlignment.end,
-            children: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => _buildBar(day, weekData[day] ?? 0)).toList(),
+            children: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+                .map((day) => _buildBar(day, weekData[day] ?? 0))
+                .toList(),
           ),
         );
       },

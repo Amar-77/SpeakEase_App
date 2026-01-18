@@ -1,61 +1,62 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseMessaging _fcm = FirebaseMessaging.instance;
 
-  // --- SIGN UP ---
   Future<String?> signUpUser({
     required String email,
     required String password,
     required String name,
-    required String role,    // 'student' or 'teacher'
-    required String classId, // e.g. 'class_6A'
+    required String role,
+    required String classId,
   }) async {
     try {
-      // 1. Create Auth Account
       UserCredential result = await _auth.createUserWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
-
+          email: email, password: password);
       User? user = result.user;
 
+      DateTime oneHourAgo = DateTime.now().subtract(const Duration(hours: 1));
+
       if (user != null) {
-        // 2. Create Firestore Profile
         await _firestore.collection('users').doc(user.uid).set({
           'uid': user.uid,
           'name': name,
           'email': email,
           'role': role,
           'class_id': classId,
-          'school_id': 'marian_eng_01', // Hardcoded link to your manual school
           'created_at': FieldValue.serverTimestamp(),
-          'speech_coins': 0, // Default for students
+          'last_notification_check': Timestamp.fromDate(oneHourAgo),
+          'hidden_notifications': [],
         });
+
+        // AUTO-SUBSCRIBE STUDENT TO CLASS TOPIC
+        if (role == 'student') {
+          await _fcm.subscribeToTopic(classId);
+        }
       }
-      return null; // Success
-    } on FirebaseAuthException catch (e) {
-      return e.message;
+      return null;
     } catch (e) {
-      print(e.toString());
       return e.toString();
     }
   }
 
-  // --- SIGN IN ---
   Future<String?> signInUser({required String email, required String password}) async {
     try {
-      await _auth.signInWithEmailAndPassword(email: email, password: password);
-      return null;
-    } on FirebaseAuthException catch (e) {
-      return e.message;
-    }
-  }
+      UserCredential result = await _auth.signInWithEmailAndPassword(
+          email: email, password: password);
 
-  // --- LOGOUT ---
-  Future<void> signOut() async {
-    await _auth.signOut();
+      // RE-SYNC TOPIC ON LOGIN (In case they switched phones)
+      DocumentSnapshot userDoc = await _firestore.collection('users').doc(result.user!.uid).get();
+      if (userDoc.exists && userDoc['role'] == 'student') {
+        await _fcm.subscribeToTopic(userDoc['class_id']);
+      }
+      return null;
+    } catch (e) {
+      return e.toString();
+    }
   }
 }
