@@ -4,6 +4,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:speakease/screens/student/home/profile.dart';
 import '../practice/practice_list_screen.dart';
 import '../dashboard/student_dashboard_screen.dart';
+import 'achievements_screen.dart';
+import 'leaderboard_screen.dart' show LeaderboardScreen;
 import 'notification_screen.dart';
 
 class StudentHome extends StatelessWidget {
@@ -469,14 +471,25 @@ class StudentHome extends StatelessWidget {
                         IconButton(
                           icon: const Icon(Icons.emoji_events_outlined, color: Colors.white54, size: 28),
                           onPressed: () {
-                            // Placeholder: Logic not present in provided snippet
+                            // Navigate to Achievements Screen passing the current user data
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => AchievementsScreen(userData: userData),
+                              ),
+                            );
                           },
                         ),
                         // Analytics Shortcut
                         IconButton(
                           icon: const Icon(Icons.bar_chart_rounded, color: Colors.white54, size: 28),
-                          onPressed: () => Navigator.push(context,
-                              MaterialPageRoute(builder: (_) => const StudentDashboardScreen())),
+                          onPressed: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              // Use 'userData' here, or whatever variable name you defined in the StreamBuilder
+                              builder: (_) => LeaderboardScreen(classId: userData['class_id'] ?? 'class_6A'),
+                            ),
+                          ),
                         ),
                       ],
                     ),
