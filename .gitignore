@@ -50,3 +50,4 @@ android/app/google-services.json
 
 
 .env
+lib/firebase_options.dart
