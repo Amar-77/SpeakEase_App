@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart'; // Required for TapGestureRecognizer
 
 class DetailedResultView extends StatelessWidget {
   final double overallScore;
@@ -9,6 +10,7 @@ class DetailedResultView extends StatelessWidget {
   final double wpm;
   final String ageGroup;
   final List<dynamic> wordAnalysis;
+  final String userTranscription; // NEW: Added for persistence
 
   const DetailedResultView({
     super.key,
@@ -20,6 +22,7 @@ class DetailedResultView extends StatelessWidget {
     required this.wpm,
     required this.ageGroup,
     required this.wordAnalysis,
+    required this.userTranscription, // NEW: Required parameter
   });
 
   @override
@@ -43,7 +46,8 @@ class DetailedResultView extends StatelessWidget {
                       color: _getScoreColor(overallScore),
                     ),
                   ),
-                  Text("${overallScore.round()}%", style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: _getScoreColor(overallScore))),
+                  Text("${overallScore.round()}%", 
+                    style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: _getScoreColor(overallScore))),
                 ],
               ),
               const SizedBox(height: 10),
@@ -80,10 +84,31 @@ class DetailedResultView extends StatelessWidget {
             borderRadius: BorderRadius.circular(10),
             border: Border.all(color: Colors.grey.shade300),
           ),
-          child: _buildRichTextTranscription(wordAnalysis),
+          child: _buildRichTextTranscription(context, wordAnalysis), // Pass context for dialogs
         ),
 
-        // 4. LEGEND
+        const SizedBox(height: 25),
+
+        // NEW 4. PERSISTENT TRANSCRIPTION VIEW
+        if (userTranscription.isNotEmpty) ...[
+          const Text("🗣️ What we heard:", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 10),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(15),
+            decoration: BoxDecoration(
+              color: Colors.blue.shade50,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: Colors.blue.shade100),
+            ),
+            child: Text(
+              "\"$userTranscription\"",
+              style: TextStyle(fontSize: 16, fontStyle: FontStyle.italic, color: Colors.blue.shade900),
+            ),
+          ),
+        ],
+
+        // 5. LEGEND (Updated for Extra Words)
         const SizedBox(height: 10),
         const Wrap(
           spacing: 15,
@@ -91,6 +116,7 @@ class DetailedResultView extends StatelessWidget {
             Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.circle, color: Colors.green, size: 12), SizedBox(width: 5), Text("Perfect")]),
             Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.circle, color: Colors.red, size: 12), SizedBox(width: 5), Text("Mistake")]),
             Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.circle, color: Colors.grey, size: 12), SizedBox(width: 5), Text("Skipped")]),
+            Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.circle, color: Colors.orange, size: 12), SizedBox(width: 5), Text("Extra")]),
           ],
         )
       ],
@@ -101,7 +127,7 @@ class DetailedResultView extends StatelessWidget {
 
   Widget _buildMetricCard(String label, String value, IconData icon, Color color) {
     return Container(
-      width: 100, // Fixed width for consistent grid
+      width: 100,
       padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 5),
       decoration: BoxDecoration(
         color: color.withOpacity(0.05),
@@ -122,7 +148,7 @@ class DetailedResultView extends StatelessWidget {
 
   Color _getScoreColor(double score) => score >= 80 ? Colors.green : (score >= 50 ? Colors.orange : Colors.red);
 
-  Widget _buildRichTextTranscription(List<dynamic> words) {
+  Widget _buildRichTextTranscription(BuildContext context, List<dynamic> words) {
     if (words.isEmpty) return const Text("No details are available.");
 
     return RichText(
@@ -133,24 +159,56 @@ class DetailedResultView extends StatelessWidget {
           Color color = Colors.black;
           TextDecoration decoration = TextDecoration.none;
           Color? bg;
+          TapGestureRecognizer? recognizer;
 
           switch (word['color']) {
-            case 'green': color = Colors.green.shade700; break;
+            case 'green': 
+              color = Colors.green.shade700; 
+              break;
             case 'red':
               color = Colors.red.shade700;
               bg = Colors.red.shade50;
+              decoration = TextDecoration.underline;
+              // Interactive: Show what they said vs what was expected
+              if (word['spoken'] != null) {
+                recognizer = TapGestureRecognizer()..onTap = () {
+                  _showMistakeDialog(context, word['text'] ?? "", word['spoken']);
+                };
+              }
               break;
             case 'gray':
               color = Colors.grey;
               decoration = TextDecoration.lineThrough;
               break;
+            case 'orange':
+              color = Colors.orange.shade800;
+              decoration = TextDecoration.underline;
+              break;
           }
 
           return TextSpan(
-            text: "${word['text']} ",
-            style: TextStyle(color: color, backgroundColor: bg, decoration: decoration, fontWeight: word['color'] == 'green' ? FontWeight.bold : FontWeight.normal),
+            text: "${word['text'] ?? word['spoken']} ", // Show target if exists, else spoken
+            recognizer: recognizer,
+            style: TextStyle(
+              color: color, 
+              backgroundColor: bg, 
+              decoration: decoration, 
+              fontWeight: word['color'] == 'green' ? FontWeight.bold : FontWeight.normal
+            ),
           );
         }).toList(),
+      ),
+    );
+  }
+
+  // Helper to show mistake comparison
+  void _showMistakeDialog(BuildContext context, String expected, String actual) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Pronunciation Check"),
+        content: Text("Target: $expected\nYou said: $actual"),
+        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("OK"))],
       ),
     );
   }

@@ -121,6 +121,7 @@ class AssignmentCard extends StatelessWidget {
   }
 
   // ⚠️ UPDATED: Now fetches ALL metrics from Firestore map
+  // ⚠️ UPDATED: Now fetches ALL metrics including persistent transcription
   void _showPreviousResult(BuildContext context, Map<String, dynamic> data) {
     showModalBottomSheet(
       context: context,
@@ -148,6 +149,10 @@ class AssignmentCard extends StatelessWidget {
                 wpm: (data['wpm'] ?? 0).toDouble(),
                 ageGroup: data['detected_age'] ?? "Unknown",
                 wordAnalysis: data['word_analysis'] ?? [],
+                
+                // 👇 ADD THIS LINE 👇
+                // This retrieves the stored speech text from Firestore
+                userTranscription: data['full_transcription'] ?? "", 
               ),
             ],
           ),
