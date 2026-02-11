@@ -4,7 +4,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class PracticeApiService {
   static final String _baseUrl =
-      dotenv.env['API_BASE_URL'] ?? "http://10.0.2.2:8000";
+      dotenv.env['API_URL'] ?? "http://10.0.2.2:8000";
 
   Future<String> generatePractice({
     required String sentence,
@@ -19,8 +19,8 @@ class PracticeApiService {
           "Content-Type": "application/x-www-form-urlencoded",
         },
         body: {
-          "sentence": sentence,
-          "weak_area": weakArea,
+          "expected_word": weakArea, // This is the mispronounced word
+          "score": "50.0",           // Force a low score to ensure AI generates text
         },
       );
 

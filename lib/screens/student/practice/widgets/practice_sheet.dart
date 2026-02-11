@@ -42,7 +42,7 @@ class _PracticeRecordingSheetState extends State<PracticeRecordingSheet> {
     super.dispose();
   }
 
-  // --- 1. RECORDING ---
+  // --- 1. RECORDING (The Fix) ---
   Future<void> _toggleRecording() async {
     try {
       if (_isRecording) {
@@ -51,8 +51,20 @@ class _PracticeRecordingSheetState extends State<PracticeRecordingSheet> {
       } else {
         if (await _audioRecorder.hasPermission()) {
           final Directory appDir = await getApplicationDocumentsDirectory();
-          final String filePath = '${appDir.path}/rec_${DateTime.now().millisecondsSinceEpoch}.m4a';
-          await _audioRecorder.start(const RecordConfig(), path: filePath);
+
+          // CHANGE 1: Use .wav extension
+          final String filePath = '${appDir.path}/rec_${DateTime.now().millisecondsSinceEpoch}.wav';
+
+          // CHANGE 2: Configure for WAV (PCM 16-bit)
+          const config = RecordConfig(
+            encoder: AudioEncoder.wav,
+            sampleRate: 16000, // Matches Whisper's requirement perfectly
+            numChannels: 1,    // Mono is smaller and safer
+          );
+
+          // CHANGE 3: Pass the config
+          await _audioRecorder.start(config, path: filePath);
+
           setState(() { _isRecording = true; _analysisResult = null; });
         }
       }
@@ -117,6 +129,11 @@ class _PracticeRecordingSheetState extends State<PracticeRecordingSheet> {
 
       // B. Ensure word_analysis includes 'spoken' words for persistent review
       List<dynamic> words = _analysisResult!['word_analysis'] ?? [];
+      // NEW: Filter for red words to add to the student's mastery list
+      List<String> redWords = words
+        .where((w) => w['color'] == 'red') 
+        .map((w) => w['text'].toString().toLowerCase())
+        .toList();
 
       // C. Gamification
       Map<String, dynamic> rewards = await _gamificationService.processSubmission(
@@ -125,27 +142,35 @@ class _PracticeRecordingSheetState extends State<PracticeRecordingSheet> {
       );
 
       // D. Save EVERYTHING to Firestore
-      await FirebaseFirestore.instance.collection('submissions').add({
-        'assignment_id': widget.assignmentId,
-        'student_id': widget.studentId,
-        'submitted_at': FieldValue.serverTimestamp(),
+ final batch = FirebaseFirestore.instance.batch();
+ 
+ // 1. Save the Submission record
+ DocumentReference subRef = FirebaseFirestore.instance.collection('submissions').doc();
+ batch.set(subRef, {
+ 'assignment_id': widget.assignmentId,
+ 'student_id': widget.studentId,
+ 'submitted_at': FieldValue.serverTimestamp(),
+ 'full_transcription': rawSpeech,
+ 'accuracy_score': overall.round(),
+ 'fluency_score': fluency,
+ 'pronunciation_score': pronun,
+ 'clarity_score': clarity,
+ 'transcription_accuracy': accuracy,
+ 'wpm': wpm,
+ 'detected_age': ageGroup,
+ 'word_analysis': words,
+ 'status': 'completed',
+ });
 
-        // NEW: Persistent Transcription for History View
-        'full_transcription': rawSpeech,
+// 2. NEW: Register red words into the student's persistent mistake list
+if (redWords.isNotEmpty) {
+ DocumentReference studentRef = FirebaseFirestore.instance.collection('users').doc(widget.studentId);
+batch.update(studentRef, {
+ 'mistake_words': FieldValue.arrayUnion(redWords),
+ });
+}
 
-        // Core Scores
-        'accuracy_score': overall.round(),
-        'fluency_score': fluency,
-        'pronunciation_score': pronun,
-        'clarity_score': clarity,
-        'transcription_accuracy': accuracy,
-        'wpm': wpm,
-        'detected_age': ageGroup,
-
-        // Persistent Word Analysis (includes target vs spoken mappings)
-        'word_analysis': words,
-        'status': 'completed',
-      });
+await batch.commit();
 
       if(mounted) {
         Navigator.pop(context);

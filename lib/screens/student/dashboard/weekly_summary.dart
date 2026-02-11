@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
+import 'word_practice_screen.dart';
 
 class WeeklySummaryScreen extends StatelessWidget {
   const WeeklySummaryScreen({super.key});
@@ -10,7 +11,6 @@ class WeeklySummaryScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser!;
     final DateTime now = DateTime.now();
-    // Calculate the threshold for exactly 7 days ago
     final DateTime lastWeek = DateTime(now.year, now.month, now.day).subtract(const Duration(days: 7));
     final Timestamp threshold = Timestamp.fromDate(lastWeek);
 
@@ -28,7 +28,6 @@ class WeeklySummaryScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // --- SECTION 1: PRACTICE CONSISTENCY (From daily_stats) ---
             const Text("Practice Consistency", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 15),
             _buildActivityChart(user.uid),
@@ -37,7 +36,6 @@ class WeeklySummaryScreen extends StatelessWidget {
             const Divider(),
             const SizedBox(height: 15),
 
-            // --- SECTION 2: PERFORMANCE METRICS (From submissions) ---
             const Text("Performance Metrics", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 15),
 
@@ -48,13 +46,8 @@ class WeeklySummaryScreen extends StatelessWidget {
                   .where('submitted_at', isGreaterThanOrEqualTo: threshold)
                   .snapshots(),
               builder: (context, snapshot) {
-                if (snapshot.hasError) {
-                  return Center(child: Text("Error: ${snapshot.error}", style: const TextStyle(color: Colors.red)));
-                }
-
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
+                if (snapshot.hasError) return Center(child: Text("Error: ${snapshot.error}"));
+                if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
 
                 var docs = snapshot.data?.docs ?? [];
                 if (docs.isEmpty) {
@@ -64,7 +57,6 @@ class WeeklySummaryScreen extends StatelessWidget {
                   );
                 }
 
-                // Data Aggregation
                 double acc = 0, flu = 0, clar = 0, pron = 0, wpmTotal = 0;
                 for (var doc in docs) {
                   var d = doc.data() as Map<String, dynamic>;
@@ -97,14 +89,13 @@ class WeeklySummaryScreen extends StatelessWidget {
 
             const SizedBox(height: 30),
 
-            // --- SECTION 3: WORDS TO REVIEW (Aggregated from word_analysis) ---
+            // --- UPDATED SECTION 3: WORDS TO REVIEW (FETCHED FROM FIRESTORE ONLY) ---
             const Text("Words to Review", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 10),
-            _buildMistakeWordList(user.uid, threshold),
+            _buildMistakeWordListFromFirestore(user.uid),
 
             const SizedBox(height: 30),
 
-            // --- SECTION 4: COIN SUMMARY ---
             _buildWeeklyCoinSummary(user.uid),
             const SizedBox(height: 20),
           ],
@@ -113,34 +104,21 @@ class WeeklySummaryScreen extends StatelessWidget {
     );
   }
 
-  // --- WIDGET: TOP 3 MISTAKE WORD AGGREGATION ---
-  Widget _buildMistakeWordList(String uid, Timestamp threshold) {
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('submissions')
-          .where('student_id', isEqualTo: uid)
-          .where('submitted_at', isGreaterThanOrEqualTo: threshold)
-          .snapshots(),
+  // --- UPDATED WIDGET: USES FIRESTORE 'mistake_words' FIELD ---
+  Widget _buildMistakeWordListFromFirestore(String uid) {
+    return StreamBuilder<DocumentSnapshot>(
+      // 1. Listen directly to the user's document for the mistake_words field
+      stream: FirebaseFirestore.instance.collection('users').doc(uid).snapshots(),
       builder: (context, snapshot) {
+        if (snapshot.hasError) return const Text("Error loading hub.");
         if (!snapshot.hasData) return const SizedBox();
 
-        Map<String, int> mistakeWords = {};
+        var userData = snapshot.data!.data() as Map<String, dynamic>?;
+        // 2. Fetch the persistent list from Firestore
+        List<String> firestoreMistakes = List<String>.from(userData?['mistake_words'] ?? []);
 
-        // Aggregate words from the submissions collection
-        for (var doc in snapshot.data!.docs) {
-          var data = doc.data() as Map<String, dynamic>;
-          // Extract word_analysis array
-          List<dynamic> analysis = data['word_analysis'] ?? [];
-          for (var word in analysis) {
-            // Identify incorrect words marked as red
-            if (word['color'] == 'red') {
-              String text = word['text'].toString().toLowerCase().trim();
-              if (text.isNotEmpty) mistakeWords[text] = (mistakeWords[text] ?? 0) + 1;
-            }
-          }
-        }
-
-        if (mistakeWords.isEmpty) {
+        // 3. Show a success message if the list is empty
+        if (firestoreMistakes.isEmpty) {
           return Container(
             padding: const EdgeInsets.all(15),
             decoration: BoxDecoration(color: Colors.green.shade50, borderRadius: BorderRadius.circular(15)),
@@ -148,63 +126,72 @@ class WeeklySummaryScreen extends StatelessWidget {
               children: [
                 Icon(Icons.check_circle, color: Colors.green),
                 SizedBox(width: 10),
-                Text("Excellent! No frequent mistakes this week."),
+                Text("You've mastered everything! Great job!"),
               ],
             ),
           );
         }
 
-        // Sort by frequency and take only the TOP 3
-        var sortedMistakes = mistakeWords.entries.toList()
-          ..sort((a, b) => b.value.compareTo(a.value));
-
-        // Limit the list to top 3
-        var topThree = sortedMistakes.take(3).toList();
-
-        return Column(
-          children: topThree.map((entry) {
-            return Card(
-              margin: const EdgeInsets.only(bottom: 10),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              color: Colors.red.shade50,
-              elevation: 0,
-              child: ListTile(
-                leading: CircleAvatar(
-                  backgroundColor: Colors.red.shade100,
-                  child: Text("${topThree.indexOf(entry) + 1}",
-                      style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+        return GestureDetector(
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => WordPracticeScreen(
+                  // 4. Pass the Firestore words to the Hub
+                  mistakeWords: firestoreMistakes, 
+                  studentId: uid,
                 ),
-                title: Text(entry.key, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.red)),
-                subtitle: Text("Mispronounced ${entry.value} times this week"),
-                trailing: const Icon(Icons.warning_amber_rounded, color: Colors.red),
               ),
             );
-          }).toList(),
+          },
+          child: Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(colors: [Colors.orange.shade400, Colors.red.shade400]),
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [BoxShadow(color: Colors.red.withOpacity(0.3), blurRadius: 10, offset: const Offset(0, 5))],
+            ),
+            child: Row(
+              children: [
+                const CircleAvatar(
+                  backgroundColor: Colors.white24,
+                  radius: 25,
+                  child: Icon(Icons.psychology, color: Colors.white, size: 30),
+                ),
+                const SizedBox(width: 15),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text("Mastery Hub", style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+                      Text("${firestoreMistakes.length} words need your attention", style: const TextStyle(color: Colors.white70)),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.play_circle_fill, color: Colors.white, size: 40),
+              ],
+            ),
+          ),
         );
       },
     );
   }
 
-  // --- WIDGET: ACTIVITY CHART ---
+  // --- ALL OTHER HELPER WIDGETS (UNCHANGED) ---
   Widget _buildActivityChart(String uid) {
     return FutureBuilder<QuerySnapshot>(
-      future: FirebaseFirestore.instance
-          .collection('users').doc(uid).collection('daily_stats')
-          .orderBy('date', descending: true).limit(7).get(),
+      future: FirebaseFirestore.instance.collection('users').doc(uid).collection('daily_stats').orderBy('date', descending: true).limit(7).get(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) return const SizedBox(height: 100, child: Center(child: CircularProgressIndicator()));
-
         var docs = snapshot.data!.docs;
         Map<String, int> weekData = {"Mon": 0, "Tue": 0, "Wed": 0, "Thu": 0, "Fri": 0, "Sat": 0, "Sun": 0};
-
         for (var doc in docs) {
           var d = doc.data() as Map<String, dynamic>;
           String dateStr = d['date'] ?? "";
           if (dateStr.isNotEmpty) {
             try {
-              // FIX: Use DateFormat to handle single-digit months/days (e.g. 2026-1-18)
               DateTime dt = DateFormat("yyyy-M-d").parse(dateStr);
-
               String dayName = ["", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][dt.weekday];
               weekData[dayName] = d['minutes_spent'] ?? 0;
             } catch (e) {
@@ -212,16 +199,13 @@ class WeeklySummaryScreen extends StatelessWidget {
             }
           }
         }
-
         return Container(
           padding: const EdgeInsets.all(15),
           decoration: BoxDecoration(color: Colors.grey.shade50, borderRadius: BorderRadius.circular(15)),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             crossAxisAlignment: CrossAxisAlignment.end,
-            children: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
-                .map((day) => _buildBar(day, weekData[day] ?? 0))
-                .toList(),
+            children: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => _buildBar(day, weekData[day] ?? 0)).toList(),
           ),
         );
       },
@@ -241,7 +225,6 @@ class WeeklySummaryScreen extends StatelessWidget {
     );
   }
 
-  // --- WIDGET: STAT CARD ---
   Widget _buildStatCard(String label, String value, IconData icon, Color color) {
     return Container(
       padding: const EdgeInsets.all(12),
@@ -263,7 +246,6 @@ class WeeklySummaryScreen extends StatelessWidget {
     );
   }
 
-  // --- WIDGET: COIN SUMMARY ---
   Widget _buildWeeklyCoinSummary(String uid) {
     return FutureBuilder<QuerySnapshot>(
       future: FirebaseFirestore.instance.collection('users').doc(uid).collection('daily_stats').get(),
