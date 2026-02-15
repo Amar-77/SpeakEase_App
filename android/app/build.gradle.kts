@@ -21,6 +21,7 @@ android {
     namespace = "com.example.speakease"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = "27.0.12077973"
+
     compileOptions {
         isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_11

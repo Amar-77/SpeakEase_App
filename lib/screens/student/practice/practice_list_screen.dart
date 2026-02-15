@@ -16,6 +16,9 @@ class _PracticeSessionListState extends State<PracticeSessionList> with WidgetsB
   final Stopwatch _stopwatch = Stopwatch();
   final GamificationService _gamificationService = GamificationService();
 
+  // Track toggle state
+  bool isShowingCompleted = false;
+
   @override
   void initState() {
     super.initState();
@@ -39,7 +42,6 @@ class _PracticeSessionListState extends State<PracticeSessionList> with WidgetsB
 
   Future<void> _saveSessionTime() async {
     if (_stopwatch.elapsed.inSeconds > 5) {
-      // THIS UPDATES THE USAGE TIME IN FIRESTORE
       await _gamificationService.updateUsageTime(seconds: _stopwatch.elapsed.inSeconds);
     }
   }
@@ -49,28 +51,103 @@ class _PracticeSessionListState extends State<PracticeSessionList> with WidgetsB
     final user = FirebaseAuth.instance.currentUser!;
 
     return Scaffold(
-      appBar: AppBar(title: const Text("Practice Tasks"), backgroundColor: Colors.blueAccent),
-      body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance
-            .collection('assignments')
-            .where('class_id', isEqualTo: widget.classId)
-            .orderBy('created_at', descending: true)
-            .snapshots(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
-          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) return const Center(child: Text("No tasks assigned yet!"));
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        title: const Text("Assignments", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+        backgroundColor: Colors.white,
+        elevation: 0,
+        iconTheme: const IconThemeData(color: Colors.black),
+      ),
+      body: Column(
+        children: [
+          // --- TOGGLE SECTION ---
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _buildToggleOption("Incompleted", !isShowingCompleted),
+                const SizedBox(width: 10),
+                _buildToggleOption("Completed", isShowingCompleted),
+              ],
+            ),
+          ),
 
-          return ListView.builder(
-            padding: const EdgeInsets.all(15),
-            itemCount: snapshot.data!.docs.length,
-            itemBuilder: (context, index) {
-              return AssignmentCard(
-                assignmentDoc: snapshot.data!.docs[index],
-                studentId: user.uid,
-              );
-            },
-          );
-        },
+          // --- LIST SECTION ---
+          Expanded(
+            child: StreamBuilder<QuerySnapshot>(
+              stream: FirebaseFirestore.instance
+                  .collection('assignments')
+                  .where('class_id', isEqualTo: widget.classId)
+                  .orderBy('created_at', descending: true)
+                  .snapshots(),
+              builder: (context, assignmentSnapshot) {
+                if (assignmentSnapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+                if (!assignmentSnapshot.hasData || assignmentSnapshot.data!.docs.isEmpty) return const Center(child: Text("No tasks assigned yet!"));
+
+                // Nested stream to get student's submissions for filtering
+                return StreamBuilder<QuerySnapshot>(
+                  stream: FirebaseFirestore.instance
+                      .collection('submissions')
+                      .where('student_id', isEqualTo: user.uid)
+                      .snapshots(),
+                  builder: (context, subSnapshot) {
+                    if (subSnapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+
+                    // Create a set of IDs for assignments already submitted
+                    final submittedIds = subSnapshot.data?.docs
+                        .map((d) => (d.data() as Map<String, dynamic>)['assignment_id'].toString())
+                        .toSet() ?? {};
+
+                    // Filter based on the toggle state
+                    final filteredDocs = assignmentSnapshot.data!.docs.where((doc) {
+                      bool isDone = submittedIds.contains(doc.id);
+                      return isShowingCompleted ? isDone : !isDone;
+                    }).toList();
+
+                    if (filteredDocs.isEmpty) {
+                      return Center(child: Text(isShowingCompleted ? "No completed tasks yet!" : "All tasks completed! 🎉"));
+                    }
+
+                    return ListView.builder(
+                      padding: const EdgeInsets.all(15),
+                      itemCount: filteredDocs.length,
+                      itemBuilder: (context, index) {
+                        return AssignmentCard(
+                          assignmentDoc: filteredDocs[index],
+                          studentId: user.uid,
+                        );
+                      },
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Toggle Button UI Helper
+  Widget _buildToggleOption(String label, bool isActive) {
+    return GestureDetector(
+      onTap: () => setState(() => isShowingCompleted = (label == "Completed")),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+        decoration: BoxDecoration(
+          color: isActive ? Colors.white : Colors.grey.shade200,
+          borderRadius: BorderRadius.circular(20),
+          border: isActive ? Border.all(color: Colors.black26) : null,
+          boxShadow: isActive ? [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4, offset: const Offset(0, 2))] : [],
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isActive ? Colors.black : Colors.grey,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
       ),
     );
   }
