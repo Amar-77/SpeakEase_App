@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../services/auth_service.dart';
+import 'forgot_password_screen.dart';
 import 'signup_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -43,7 +44,6 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Welcome Back")),
       body: Padding(
         padding: const EdgeInsets.all(20.0),
         child: Column(
@@ -52,7 +52,7 @@ class _LoginScreenState extends State<LoginScreen> {
           children: [
             const Icon(Icons.mic, size: 80, color: Colors.blueAccent),
             const SizedBox(height: 20),
-            const Text("SpeakEase Login", textAlign: TextAlign.center, style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+            const Text("SpeakEase", textAlign: TextAlign.center, style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
             const SizedBox(height: 40),
 
             TextField(
@@ -66,7 +66,23 @@ class _LoginScreenState extends State<LoginScreen> {
               obscureText: true,
               decoration: const InputDecoration(labelText: "Password", prefixIcon: Icon(Icons.lock), border: OutlineInputBorder()),
             ),
-            const SizedBox(height: 30),
+
+            //Forgot Password
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const ForgotPasswordScreen()),
+                  );
+                },
+                child: const Text(
+                  "Forgot Password?",
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
 
             _isLoading
                 ? const Center(child: CircularProgressIndicator())

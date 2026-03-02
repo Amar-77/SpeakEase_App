@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:speakease/services/gamification_service.dart';
-import 'widgets/assignment_card.dart'; // Import Card
+import 'widgets/assignment_card.dart';
 
 class PracticeSessionList extends StatefulWidget {
   final String classId;
@@ -16,7 +16,6 @@ class _PracticeSessionListState extends State<PracticeSessionList> with WidgetsB
   final Stopwatch _stopwatch = Stopwatch();
   final GamificationService _gamificationService = GamificationService();
 
-  // Track toggle state
   bool isShowingCompleted = false;
 
   @override
@@ -41,8 +40,13 @@ class _PracticeSessionListState extends State<PracticeSessionList> with WidgetsB
   }
 
   Future<void> _saveSessionTime() async {
-    if (_stopwatch.elapsed.inSeconds > 5) {
-      await _gamificationService.updateUsageTime(seconds: _stopwatch.elapsed.inSeconds);
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null && _stopwatch.elapsed.inSeconds > 5) {
+      // ⏱️ UPDATED: Pass User ID and seconds to helper
+      await _gamificationService.updateUsageTime(
+          userId: user.uid,
+          seconds: _stopwatch.elapsed.inSeconds
+      );
     }
   }
 
@@ -60,7 +64,6 @@ class _PracticeSessionListState extends State<PracticeSessionList> with WidgetsB
       ),
       body: Column(
         children: [
-          // --- TOGGLE SECTION ---
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 10),
             child: Row(
@@ -72,8 +75,6 @@ class _PracticeSessionListState extends State<PracticeSessionList> with WidgetsB
               ],
             ),
           ),
-
-          // --- LIST SECTION ---
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance
@@ -85,7 +86,6 @@ class _PracticeSessionListState extends State<PracticeSessionList> with WidgetsB
                 if (assignmentSnapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
                 if (!assignmentSnapshot.hasData || assignmentSnapshot.data!.docs.isEmpty) return const Center(child: Text("No tasks assigned yet!"));
 
-                // Nested stream to get student's submissions for filtering
                 return StreamBuilder<QuerySnapshot>(
                   stream: FirebaseFirestore.instance
                       .collection('submissions')
@@ -94,12 +94,10 @@ class _PracticeSessionListState extends State<PracticeSessionList> with WidgetsB
                   builder: (context, subSnapshot) {
                     if (subSnapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
 
-                    // Create a set of IDs for assignments already submitted
                     final submittedIds = subSnapshot.data?.docs
                         .map((d) => (d.data() as Map<String, dynamic>)['assignment_id'].toString())
                         .toSet() ?? {};
 
-                    // Filter based on the toggle state
                     final filteredDocs = assignmentSnapshot.data!.docs.where((doc) {
                       bool isDone = submittedIds.contains(doc.id);
                       return isShowingCompleted ? isDone : !isDone;
@@ -129,7 +127,6 @@ class _PracticeSessionListState extends State<PracticeSessionList> with WidgetsB
     );
   }
 
-  // Toggle Button UI Helper
   Widget _buildToggleOption(String label, bool isActive) {
     return GestureDetector(
       onTap: () => setState(() => isShowingCompleted = (label == "Completed")),
