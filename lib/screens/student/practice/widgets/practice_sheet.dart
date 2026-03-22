@@ -122,7 +122,7 @@ class _PracticeRecordingSheetState extends State<PracticeRecordingSheet> {
 
           const config = RecordConfig(
             encoder: AudioEncoder.wav,
-            sampleRate: 16000,
+            sampleRate: 44100,
             numChannels: 1,
           );
 

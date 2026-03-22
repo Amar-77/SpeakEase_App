@@ -3,7 +3,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../assignments/create_assignment_screen.dart';
 import '../assignments/teacher_history_screen.dart';
-import '../students/student_list_screen.dart'; // Make sure to import this
+import '../students/student_list_screen.dart';
+import 'package:speakease/screens/auth/auth_gate.dart'; // ✅ ADDED: Import AuthGate
 
 class TeacherHome extends StatelessWidget {
   const TeacherHome({super.key});
@@ -19,7 +20,17 @@ class TeacherHome extends StatelessWidget {
         actions: [
           IconButton(
             icon: const Icon(Icons.logout),
-            onPressed: () async => await FirebaseAuth.instance.signOut(),
+            onPressed: () async {
+              // ✅ UPDATED: Safe Logout Logic
+              await FirebaseAuth.instance.signOut();
+
+              if (context.mounted) {
+                Navigator.of(context).pushAndRemoveUntil(
+                  MaterialPageRoute(builder: (context) => const AuthGate()),
+                      (route) => false,
+                );
+              }
+            },
           )
         ],
       ),
@@ -74,7 +85,7 @@ class TeacherHome extends StatelessWidget {
 
                   const SizedBox(height: 20),
 
-                  // 3. Student List Button (The new feature)
+                  // 3. Student List Button
                   OutlinedButton.icon(
                     onPressed: () {
                       Navigator.push(
