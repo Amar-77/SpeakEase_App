@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../auth/auth_gate.dart';
 import '../../auth/login_screen.dart';
 
 class ProfilePage extends StatefulWidget {
@@ -16,10 +17,11 @@ class _ProfilePageState extends State<ProfilePage> {
   // --- LOGOUT FUNCTION ---
   Future<void> _logout() async {
     await FirebaseAuth.instance.signOut();
+
     if (mounted) {
-      // Remove all routes and go back to Login
+      // ✅ Rebuild the app starting from the AuthGate!
       Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (context) => const LoginScreen()),
+        MaterialPageRoute(builder: (context) => const AuthGate()),
             (Route<dynamic> route) => false,
       );
     }
