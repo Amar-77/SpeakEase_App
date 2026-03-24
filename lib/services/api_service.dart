@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import '../models/analysis_model.dart'; // Make sure you move your QuickAnalysis/WordAnalysis classes to a separate file, or define them here.
 
 class ApiService {
   Future<Map<String, dynamic>?> analyzeAudio(String filePath, String refText) async {

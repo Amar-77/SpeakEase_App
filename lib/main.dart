@@ -1,3 +1,61 @@
+// import 'package:flutter/material.dart';
+// import 'package:firebase_core/firebase_core.dart';
+// import 'package:firebase_auth/firebase_auth.dart';
+// import 'package:cloud_firestore/cloud_firestore.dart';
+
+// // Imports
+// import 'screens/auth/login_screen.dart';
+// import 'screens/student/home/student_home.dart';
+// import 'screens/teacher/home/teacher_home.dart';
+
+
+// void main() async {
+//   WidgetsFlutterBinding.ensureInitialized();
+//   await Firebase.initializeApp();
+//   runApp(const MaterialApp(
+//     debugShowCheckedModeBanner: false,
+//     home: AuthWrapper(),
+//   ));
+// }
+
+// class AuthWrapper extends StatelessWidget {
+//   const AuthWrapper({super.key});
+
+//   @override
+//   Widget build(BuildContext context) {
+//     return StreamBuilder<User?>(
+//       stream: FirebaseAuth.instance.authStateChanges(),
+//       builder: (context, snapshot) {
+//         // 1. Not Logged In -> Show Login
+//         if (!snapshot.hasData) {
+//           return const LoginScreen();
+//         }
+
+//         // 2. Logged In -> Check Role
+//         User user = snapshot.data!;
+//         return FutureBuilder<DocumentSnapshot>(
+//           future: FirebaseFirestore.instance.collection('users').doc(user.uid).get(),
+//           builder: (context, snapshot) {
+//             if (snapshot.connectionState == ConnectionState.waiting) {
+//               return const Scaffold(body: Center(child: CircularProgressIndicator()));
+//             }
+
+//             if (snapshot.hasData && snapshot.data!.exists) {
+//               String role = snapshot.data!['role'];
+//               if (role == 'teacher') {
+//                 return const TeacherHome();
+//               } else {
+//                 return const StudentHome();
+//               }
+//             }
+
+//             return const LoginScreen(); // Fallback
+//           },
+//         );
+//       },
+//     );
+//   }
+// }
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -5,6 +63,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:speakease/screens/auth/auth_gate.dart';
 import 'package:speakease/screens/auth/login_screen.dart';
 import 'package:speakease/screens/student/home/student_home.dart';
 import 'package:speakease/screens/teacher/home/teacher_home.dart';
@@ -92,7 +151,7 @@ void main() async {
 
   runApp(const MaterialApp(
     debugShowCheckedModeBanner: false,
-    home: AuthWrapper(),
+    home: AuthGate(),
   ));
 }
 
@@ -102,23 +161,36 @@ class AuthWrapper extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<User?>(
+      // Stream 1: Listens for Login/Logout
       stream: FirebaseAuth.instance.authStateChanges(),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) return const LoginScreen();
+      builder: (context, authSnapshot) {
+        // Not logged in? Show Login Screen.
+        if (!authSnapshot.hasData) return const LoginScreen();
 
-        User user = snapshot.data!;
-        return FutureBuilder<DocumentSnapshot>(
-          future: FirebaseFirestore.instance.collection('users').doc(user.uid).get(),
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Scaffold(body: Center(child: CircularProgressIndicator()));
+        User user = authSnapshot.data!;
+
+        // Stream 2: Listens to their Firestore Document (Replaces FutureBuilder)
+        return StreamBuilder<DocumentSnapshot>(
+          stream: FirebaseFirestore.instance.collection('users').doc(user.uid).snapshots(),
+          builder: (context, userSnapshot) {
+
+            // While fetching data, show loading
+            if (userSnapshot.connectionState == ConnectionState.waiting) {
+              return const Scaffold(body: Center(child: CircularProgressIndicator(color: Colors.blueAccent)));
             }
 
-            if (snapshot.hasData && snapshot.data!.exists) {
-              String role = snapshot.data!['role'];
+            // Once the document exists and has data, route them!
+            if (userSnapshot.hasData && userSnapshot.data!.exists) {
+              var data = userSnapshot.data!.data() as Map<String, dynamic>;
+              String role = data['role'] ?? 'student'; // Fallback to student just in case
+
               return role == 'teacher' ? const TeacherHome() : const StudentHome();
             }
-            return const LoginScreen();
+
+            // THE MAGIC FIX: If Auth is true, but Firestore doc doesn't exist YET
+            // (meaning the race condition is happening during signup),
+            // just keep showing the loading spinner. Do NOT return the LoginScreen here!
+            return const Scaffold(body: Center(child: CircularProgressIndicator(color: Colors.purpleAccent)));
           },
         );
       },

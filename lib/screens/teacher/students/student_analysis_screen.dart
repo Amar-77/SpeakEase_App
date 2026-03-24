@@ -188,6 +188,7 @@ class _AssignmentAnalysisCard extends StatelessWidget {
                 wpm: (data['wpm'] ?? 0).toDouble(),
                 ageGroup: data['detected_age'] ?? "Unknown",
                 wordAnalysis: data['word_analysis'] ?? [],
+                userTranscription: data['full_transcription'] ?? "",
               ),
             ],
           ),

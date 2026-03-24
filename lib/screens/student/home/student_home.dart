@@ -1,357 +1,367 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:intl/intl.dart';
 import 'package:speakease/screens/student/home/profile.dart';
+import 'package:speakease/screens/student/home/widgets/student_app_bar.dart';
+import '../../../services/gamification_service.dart';
+import '../dashboard/word_practice_screen.dart';
 import '../practice/practice_list_screen.dart';
 import '../dashboard/student_dashboard_screen.dart';
 import 'achievements_screen.dart';
-import 'leaderboard_screen.dart' show LeaderboardScreen;
+import 'leaderboard_screen.dart';
 import 'notification_screen.dart';
 
-class StudentHome extends StatelessWidget {
+class StudentHome extends StatefulWidget {
   const StudentHome({super.key});
 
-  // Helper function to reset the notification count
+  @override
+  State<StudentHome> createState() => _StudentHomeState();
+}
+
+class _StudentHomeState extends State<StudentHome> {
+  // Controller for the sliding pages
+  final PageController _pageController = PageController();
+  final GamificationService _gamificationService = GamificationService();
+  int _currentIndex = 0;
+  String? _classId;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchUserClass();
+    _runStartupChecks();
+  }
+
+  void _runStartupChecks() async {
+    // Because your UI listens to a Stream, if this resets the streak to 0, the UI will update automatically instantly!
+    await _gamificationService.checkStreakOnStartup();
+  }
+
+  void _fetchUserClass() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+      if (mounted) {
+        setState(() {
+          _classId = doc.data()?['class_id'];
+        });
+      }
+    }
+  }
+
+  // Navigation Logic
+  void _onItemTapped(int index) {
+    setState(() => _currentIndex = index);
+    _pageController.animateToPage(
+      index,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.white,
+      body: Stack(
+        children: [
+          // 1. THE HORIZONTAL SLIDER
+          PageView(
+            controller: _pageController,
+            onPageChanged: (index) => setState(() => _currentIndex = index),
+            children: [
+              // PAGE 0: Your Home Dashboard (The code you sent, extracted below)
+              const _DashboardContent(),
+
+              // PAGE 1: Achievements
+              AchievementsScreen(), // Pass data if needed
+
+              // PAGE 2: Leaderboard
+              LeaderboardScreen(classId: _classId ?? 'loading'),
+            ],
+          ),
+
+          // 2. THE FLOATING BOTTOM NAV (Stays on top)
+          Align(
+            alignment: Alignment.bottomCenter,
+            child: Container(
+              margin: const EdgeInsets.only(bottom: 30, left: 40, right: 40),
+              height: 70,
+              decoration: BoxDecoration(
+                color: const Color(0xFF222222),
+                borderRadius: BorderRadius.circular(35),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.3),
+                    blurRadius: 15,
+                    offset: const Offset(0, 10),
+                  )
+                ],
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  _buildNavItem(Icons.home_rounded, 0),
+                  _buildNavItem(Icons.emoji_events_outlined, 1),
+                  _buildNavItem(Icons.bar_chart_rounded, 2),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNavItem(IconData icon, int index) {
+    bool isActive = _currentIndex == index;
+    return GestureDetector(
+      onTap: () => _onItemTapped(index),
+      child: AnimatedContainer(
+        padding: EdgeInsets.only(top: 10,bottom: 10),
+        duration: const Duration(milliseconds: 300),
+        width: 85,
+        height: 50,
+        decoration: BoxDecoration(
+          color: isActive ? Colors.white : Colors.transparent,
+          borderRadius: BorderRadius.circular(35),
+        ),
+        child: Icon(
+          icon,
+          color: isActive ? Colors.black : Colors.white54,
+          size: 28,
+        ),
+      ),
+    );
+  }
+}
+
+// ==========================================
+// YOUR ORIGINAL DASHBOARD LOGIC (Moved Here)
+// ==========================================
+class _DashboardContent extends StatelessWidget {
+  const _DashboardContent();
+
+  //  NEW: Dynamic Date Logic
+  String _getCurrentDate() {
+    DateTime now = DateTime.now();
+    String day = DateFormat('d').format(now);
+    String suffix = 'th';
+    if (day.endsWith('1') && day != '11') {suffix = 'st';}
+    else if (day.endsWith('2') && day != '12') {suffix = 'nd';}
+    else if (day.endsWith('3') && day != '13') {suffix = 'rd';}
+    return "$day$suffix ${DateFormat('MMMM y').format(now)}";
+  }
+
   Future<void> _handleNotificationClick(BuildContext context, String uid, String? classId) async {
-    // 1. Update the timestamp in Firestore to "now"
+    if (context.mounted) {
+      Navigator.push(context, MaterialPageRoute(builder: (context) => NotificationScreen(classId: classId)));
+    }
     await FirebaseFirestore.instance.collection('users').doc(uid).update({
       'last_notification_check': FieldValue.serverTimestamp(),
     });
+  }
 
-    // 2. Navigate to the Notification Page
-    if (context.mounted) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => NotificationScreen(classId: classId),
-        ),
-      );
+  //  NEW: Fetch 'mistake_words' and navigate
+  Future<void> _navigateToWordPractice(BuildContext context, String uid) async {
+    // 1. Show a loading indicator
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => const Center(child: CircularProgressIndicator()),
+    );
+
+    try {
+      // 2. Fetch the latest user data
+      DocumentSnapshot userDoc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+
+      if (context.mounted) {
+        Navigator.pop(context); // Close the loading spinner
+
+        if (userDoc.exists) {
+          Map<String, dynamic> data = userDoc.data() as Map<String, dynamic>;
+
+          // 3. Safely extract the words list
+          // Ensure your Firestore field is actually named 'mistake_words'
+          List<String> fetchedWords = List<String>.from(data['mistake_words'] ?? []);
+
+          // 4. Navigate
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => WordPracticeScreen(
+                mistakeWords: fetchedWords,
+                studentId: uid, // ✅ Matches your screen's parameter name
+              ),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (context.mounted) {
+        Navigator.pop(context); // Close loader if error
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    // For responsive sizing
     final size = MediaQuery.of(context).size;
     final user = FirebaseAuth.instance.currentUser!;
 
     return StreamBuilder<DocumentSnapshot>(
       stream: FirebaseFirestore.instance.collection('users').doc(user.uid).snapshots(),
       builder: (context, userSnapshot) {
-        if (!userSnapshot.hasData) {
-          return const Scaffold(
-            backgroundColor: Colors.white,
-            body: Center(child: CircularProgressIndicator()),
-          );
-        }
+        if (!userSnapshot.hasData) return const Center(child: CircularProgressIndicator());
 
         var userData = userSnapshot.data!.data() as Map<String, dynamic>;
         String? classId = userData['class_id'];
-        Timestamp lastCheck = userData['last_notification_check'] ?? Timestamp.now();
-
-        // Data Extraction
         String userName = userData['name'] ?? 'Student';
-        int coins = userData['speech_coins'] ?? 0;
         int level = userData['level'] ?? 1;
         int currentXp = userData['current_xp'] ?? 0;
         int maxXp = userData['max_xp'] ?? 1200;
         int streak = userData['current_streak'] ?? 0;
 
-        return Scaffold(
-          backgroundColor: Colors.white,
-          body: SafeArea(
-            child: Stack(
+        // Added padding at bottom so content isn't hidden behind the floating nav
+        return SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.only(bottom: 120),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Main Scrollable Content
-                SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+          
+                // ✅ JUST ONE LINE NOW!
+                const StudentAppBar(),
+          
+                const SizedBox(height: 10),
+          
+                // --- HERO SECTION (With Dynamic Date) ---
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24.0),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // --- TOP BAR ---
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          // Left: Menu Icon
-                          const Icon(Icons.menu_rounded, size: 30, color: Colors.black87),
-
-                          // Right: Notifications, Coins, Avatar
-                          Row(
-                            children: [
-                              // 1. Notification Badge (Preserving Logic)
-                              StreamBuilder<QuerySnapshot>(
-                                stream: FirebaseFirestore.instance
-                                    .collection('assignments')
-                                    .where('class_id', isEqualTo: classId)
-                                    .where('created_at', isGreaterThan: lastCheck)
-                                    .snapshots(),
-                                builder: (context, assignmentSnapshot) {
-                                  int unreadCount = 0;
-                                  if (assignmentSnapshot.hasData) {
-                                    unreadCount = assignmentSnapshot.data!.docs.length;
-                                  }
-
-                                  return Badge(
-                                    isLabelVisible: unreadCount > 0,
-                                    label: Text('$unreadCount', style: const TextStyle(fontSize: 10)),
-                                    backgroundColor: Colors.red,
-                                    child: IconButton(
-                                      icon: const Icon(Icons.notifications_none_rounded, size: 30, color: Colors.black87),
-                                      onPressed: () => _handleNotificationClick(context, user.uid, classId),
-                                    ),
-                                  );
-                                },
-                              ),
-
-                              const SizedBox(width: 10),
-
-                              // 2. Speech Coins (New UI)
-                              Row(
-                                children: [
-                                  Image.asset(
-                                    'assets/images/speech_coin.png',
-                                    width: 26,
-                                    height: 26,
-                                    fit: BoxFit.contain,
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    "$coins",
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: 18,
-                                      color: Colors.black87,
-                                    ),
-                                  ),
-                                ],
-                              ),
-
-                              const SizedBox(width: 15),
-
-                              // 3. Profile Avatar (Preserving Navigation)
-                              GestureDetector(
-                                onTap: () {
-                                  Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfilePage()));
-                                },
-                                child: CircleAvatar(
-                                  radius: 22,
-                                  backgroundImage: const AssetImage('assets/images/user_avatar.jpg'),
-                                  // Fallback color if asset fails
-                                  backgroundColor: Colors.blue.shade100,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-
-                      const SizedBox(height: 25),
-
-                      // --- HERO SECTION (Gamification Card) ---
                       Container(
                         width: double.infinity,
                         height: size.height * 0.38,
                         decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [Colors.blue.shade50, Colors.purple.shade50],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ),
+                          gradient: LinearGradient(colors: [Colors.blue.shade50, Colors.purple.shade50]),
                           borderRadius: BorderRadius.circular(32),
                         ),
                         child: Stack(
                           children: [
                             Padding(
                               padding: const EdgeInsets.all(24.0),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'WELCOME,',
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      color: Colors.grey.shade600,
-                                      fontWeight: FontWeight.w600,
-                                      letterSpacing: 1.0,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    userName.toUpperCase() + '!',
-                                    style: const TextStyle(
-                                      fontSize: 32,
-                                      fontWeight: FontWeight.w900,
-                                      color: Colors.black,
-                                      height: 1.0,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 10),
-                                  Text(
-                                    '11th December 2025', // Static date as per design
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      color: Colors.grey.shade500,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 15),
-                                  // Streak Badge
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                    decoration: BoxDecoration(
-                                        color: Colors.white,
-                                        borderRadius: BorderRadius.circular(12),
-                                        boxShadow: [
-                                          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 5)
-                                        ]
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        const Icon(Icons.local_fire_department, color: Colors.orange, size: 18),
-                                        const SizedBox(width: 4),
-                                        Text(
-                                          '$streak Day Streak',
-                                          style: const TextStyle(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w700,
-                                            color: Colors.black87,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-
-                                  const Spacer(),
-
-                                  // Level & Progress Bar
-                                  Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        'lvl $level',
-                                        style: const TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w800,
-                                          color: Colors.black87,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 8),
-                                      Row(
-                                        children: [
-                                          Expanded(
-                                            flex: 3,
-                                            child: ClipRRect(
-                                              borderRadius: BorderRadius.circular(10),
-                                              child: LinearProgressIndicator(
-                                                value: currentXp / maxXp,
-                                                backgroundColor: Colors.grey.shade300,
-                                                valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF4CAF50)),
-                                                minHeight: 12,
-                                              ),
-                                            ),
-                                          ),
-                                          const SizedBox(width: 80), // Space for character
-                                        ],
-                                      ),
-                                      const SizedBox(height: 6),
-                                      Text(
-                                        '$currentXp/$maxXp',
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          color: Colors.grey.shade500,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                    ],
-                                  )
-                                ],
-                              ),
+                              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                Text('WELCOME,', style: TextStyle(fontSize: 14, color: Colors.grey.shade600, fontWeight: FontWeight.bold, letterSpacing: 1.0)),
+                                const SizedBox(height: 4),
+                                Text('${userName.toUpperCase()}!', style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w900)),
+                                const SizedBox(height: 10),
+          
+                                //  UPDATED DATE
+                                Text(_getCurrentDate(), style: TextStyle(fontSize: 13, color: Colors.grey.shade500, fontWeight: FontWeight.w500)),
+          
+                                const SizedBox(height: 15),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
+                                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                                    const Icon(Icons.local_fire_department, color: Colors.orange, size: 18),
+                                    const SizedBox(width: 4),
+                                    Text('$streak Day Streak', style: const TextStyle(fontWeight: FontWeight.bold)),
+                                  ]),
+                                ),
+                                const Spacer(),
+                                // Level Bar logic (Same as before)...
+                                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                  Text('lvl $level', style: const TextStyle(fontWeight: FontWeight.bold)),
+                                  const SizedBox(height: 8),
+                                  ClipRRect(borderRadius: BorderRadius.circular(10), child: LinearProgressIndicator(value: currentXp / maxXp, minHeight: 12, backgroundColor: Colors.grey.shade300, valueColor: const AlwaysStoppedAnimation(Color(0xFF4CAF50)))),
+                                  const SizedBox(height: 6),
+                                  Text('$currentXp/$maxXp', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                                ])
+                              ]),
                             ),
-                            // Character Image
-                            Positioned(
-                              right: -70,
-                              bottom: 0,
-                              child: Image.asset(
-                                'assets/images/home_kid_with_mic.png',
-                                height: size.height * 0.28,
-                                fit: BoxFit.contain,
-                              ),
-                            ),
+                            Positioned(right: -70, bottom: 0, child: Image.asset('assets/images/home_kid_with_mic.png', height: size.height * 0.28)),
                           ],
                         ),
                       ),
-
                       const SizedBox(height: 30),
-
-                      // --- Category Header ---
-                      const Text(
-                        'Category',
-                        style: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.w800,
-                          color: Colors.black,
-                        ),
-                      ),
+                      const Text('Category', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 15),
-
-                      // --- ACTION GRID ---
+          
+                      // --- GRID (Same as before) ---
                       Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Left Column: Practice Sessions
-                          Expanded(
-                            flex: 1,
-                            child: GestureDetector(
-                              onTap: () => Navigator.push(context,
-                                  MaterialPageRoute(builder: (_) => PracticeSessionList(classId: classId ?? ''))),
-                              child: Container(
+                          Expanded(child: GestureDetector(
+                            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => PracticeSessionList(classId: classId ?? ''))),
+                            child: Container(
                                 height: 240,
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFFF3E5F5), // Light Purple
-                                  borderRadius: BorderRadius.circular(28),
+                                    color: const Color(0xFFF3E5F5),
+                                    borderRadius: BorderRadius.circular(28)
                                 ),
                                 child: Stack(
+                                    children: [
+                                      // Positioned(
+                                      //     top: 15,
+                                      //     right: 15,
+                                      //     child: Container(
+                                      //         padding: const EdgeInsets.symmetric(
+                                      //             horizontal: 12,
+                                      //             vertical: 6
+                                      //         ),
+                                      //         decoration: BoxDecoration(
+                                      //             color: const Color(0xFFFFFFFF),
+                                      //             borderRadius: BorderRadius.circular(20)
+                                      //         ),
+                                      //         child: const Text(
+                                      //             'NEW', style: TextStyle(
+                                      //             fontSize: 11,
+                                      //             fontWeight: FontWeight.bold,
+                                      //             color: Colors.red))
+                                      //     )),
+                                      Center(
+                                          child: Image.asset('assets/images/mic_floating.png',
+                                              height: 120
+                                          )),
+                                      const Positioned(
+                                          bottom: 20,
+                                          left: 20,
+                                          child: Text(
+                                              'New\nPractice\nSessions',
+                                              style: TextStyle(
+                                                  fontSize: 18,
+                                                  fontWeight: FontWeight.bold,
+                                                  height: 1.1
+                                              )))
+                                    ])),
+                          )),
+                          const SizedBox(width: 16),
+                          Expanded(child: Column(children: [
+                            GestureDetector(
+                              onTap: () => _navigateToWordPractice(context, user.uid), // 👈 Calls the new function
+                              child: Container(
+                                height: 112,
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFFBF4D4), // Light Cream
+                                  borderRadius: BorderRadius.circular(24),
+                                ),
+                                child: Row(
                                   children: [
-                                    // New Badge
-                                    Positioned(
-                                      top: 15,
-                                      right: 15,
-                                      child: Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                        decoration: BoxDecoration(
-                                          color: const Color(0xFFFFD54F),
-                                          borderRadius: BorderRadius.circular(20),
-                                        ),
-                                        child: const Text(
-                                          'NEW',
-                                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white),
-                                        ),
-                                      ),
-                                    ),
-                                    // Image
-                                    Positioned(
-                                      top: 40,
-                                      left: 0,
-                                      right: 0,
-                                      child: Center(
-                                        child: Image.asset(
-                                          'assets/images/mic_floating.png',
-                                          height: 120,
-                                          fit: BoxFit.contain,
-                                        ),
-                                      ),
-                                    ),
-                                    // Text
-                                    const Positioned(
-                                      bottom: 20,
-                                      left: 20,
+                                    Image.asset('assets/images/assigned_test.png', height: 50),
+                                    const SizedBox(width: 12),
+                                    const Expanded(
                                       child: Column(
+                                        mainAxisAlignment: MainAxisAlignment.center,
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
-                                          Text('New', style: TextStyle(fontSize: 18, height: 1.1, fontWeight: FontWeight.w800)),
-                                          Text('Practice', style: TextStyle(fontSize: 18, height: 1.1, fontWeight: FontWeight.w800)),
-                                          Text('Sessions', style: TextStyle(fontSize: 18, height: 1.1, fontWeight: FontWeight.w800)),
+                                          Text('Word', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, height: 1.0)),
+                                          Text('Practice', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, height: 1.0)),
+                                          Text('Pending', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, height: 1.0)),
                                         ],
                                       ),
                                     )
@@ -359,142 +369,31 @@ class StudentHome extends StatelessWidget {
                                 ),
                               ),
                             ),
-                          ),
-
-                          const SizedBox(width: 16),
-
-                          // Right Column: Homework & Analytics
-                          Expanded(
-                            flex: 1,
-                            child: Column(
-                              children: [
-                                // Top: Homework Pending (Mapped to Notification logic)
-                                GestureDetector(
-                                  onTap: () => _handleNotificationClick(context, user.uid, classId),
-                                  child: Container(
-                                    height: 112,
-                                    padding: const EdgeInsets.all(16),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFFFFF8E1), // Light Cream
-                                      borderRadius: BorderRadius.circular(24),
-                                    ),
-                                    child: Row(
+          
+                            const SizedBox(height: 16),
+                            GestureDetector(
+                              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const StudentDashboardScreen())),
+                              child: Container(
+                                  height: 112,
+                                  padding: const EdgeInsets.all(16),
+                                  decoration: BoxDecoration(
+                                      color: const Color(0xFFE1F5FE),
+                                      borderRadius: BorderRadius.circular(24)),
+                                  child: Row(
                                       children: [
-                                        Image.asset('assets/images/assigned_test.png', height: 50),
-                                        const SizedBox(width: 12),
-                                        const Expanded(
-                                          child: Column(
-                                            mainAxisAlignment: MainAxisAlignment.center,
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            children: [
-                                              Text('Home', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, height: 1.0)),
-                                              Text('works', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, height: 1.0)),
-                                              Text('Pending', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, height: 1.0)),
-                                            ],
-                                          ),
-                                        )
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(height: 16),
-
-                                // Bottom: Detailed Analysis (Mapped to Dashboard)
-                                GestureDetector(
-                                  onTap: () => Navigator.push(context,
-                                      MaterialPageRoute(builder: (_) => const StudentDashboardScreen())),
-                                  child: Container(
-                                    height: 112,
-                                    padding: const EdgeInsets.all(16),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFFE1F5FE), // Light Blue
-                                      borderRadius: BorderRadius.circular(24),
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        const Expanded(
-                                          child: Column(
-                                            mainAxisAlignment: MainAxisAlignment.center,
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            children: [
-                                              Text('Detailed', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, height: 1.1)),
-                                              Text('Analysis', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, height: 1.1)),
-                                            ],
-                                          ),
-                                        ),
-                                        Image.asset('assets/images/detailed_analysis.png', height: 50),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ],
+                                        const Expanded(child:
+                                        Text('Detailed\nAnalysis',
+                                            style: TextStyle(fontWeight: FontWeight.bold,
+                                                height: 1.1))),
+                                        Image.asset('assets/images/detailed_analysis.png',
+                                            height: 50)])),
                             ),
-                          ),
+                          ])),
                         ],
                       ),
-                      const SizedBox(height: 100), // Space for floating nav
                     ],
                   ),
-                ),
-
-                // --- FLOATING BOTTOM NAV ---
-                Align(
-                  alignment: Alignment.bottomCenter,
-                  child: Container(
-                    margin: const EdgeInsets.only(bottom: 30, left: 40, right: 40),
-                    height: 70,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF222222),
-                      borderRadius: BorderRadius.circular(35),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.3),
-                          blurRadius: 15,
-                          offset: const Offset(0, 10),
-                        )
-                      ],
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        // Home (Active)
-                        Container(
-                          width: 50,
-                          height: 50,
-                          decoration: const BoxDecoration(
-                            color: Colors.white,
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(Icons.home_rounded, color: Colors.black),
-                        ),
-                        // Leaderboard Placeholder (Visual only, as logic wasn't in source)
-                        IconButton(
-                          icon: const Icon(Icons.emoji_events_outlined, color: Colors.white54, size: 28),
-                          onPressed: () {
-                            // Navigate to Achievements Screen passing the current user data
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => AchievementsScreen(userData: userData),
-                              ),
-                            );
-                          },
-                        ),
-                        // Analytics Shortcut
-                        IconButton(
-                          icon: const Icon(Icons.bar_chart_rounded, color: Colors.white54, size: 28),
-                          onPressed: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              // Use 'userData' here, or whatever variable name you defined in the StreamBuilder
-                              builder: (_) => LeaderboardScreen(classId: userData['class_id'] ?? 'class_6A'),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
+                )
               ],
             ),
           ),

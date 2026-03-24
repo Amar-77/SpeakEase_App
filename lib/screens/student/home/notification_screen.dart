@@ -19,7 +19,7 @@ class NotificationScreen extends StatelessWidget {
     List hidden = List.from(snap.get('hidden_notifications') ?? []);
 
     // Safety Cap: If list is too large, remove the oldest (first) item
-    if (hidden.length >= 100) {
+    if (hidden.length >= 50) {
       hidden.removeAt(0);
     }
 
