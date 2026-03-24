@@ -300,7 +300,7 @@ class _DashboardContent extends StatelessWidget {
                             child: Container(
                                 height: 240,
                                 decoration: BoxDecoration(
-                                    color: const Color(0xFFF3E5F5),
+                                    color: const Color(0xFFFBF4D4),
                                     borderRadius: BorderRadius.circular(28)
                                 ),
                                 child: Stack(
@@ -324,14 +324,14 @@ class _DashboardContent extends StatelessWidget {
                                       //             color: Colors.red))
                                       //     )),
                                       Center(
-                                          child: Image.asset('assets/images/mic_floating.png',
+                                          child: Image.asset('assets/images/homework_pending.png',
                                               height: 120
                                           )),
                                       const Positioned(
                                           bottom: 20,
                                           left: 20,
                                           child: Text(
-                                              'New\nPractice\nSessions',
+                                              'Homeworks\nPending\n',
                                               style: TextStyle(
                                                   fontSize: 18,
                                                   fontWeight: FontWeight.bold,
@@ -347,12 +347,12 @@ class _DashboardContent extends StatelessWidget {
                                 height: 112,
                                 padding: const EdgeInsets.all(16),
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFFFBF4D4), // Light Cream
+                                  color: const Color(0xFFF3E5F5), // Light Cream
                                   borderRadius: BorderRadius.circular(24),
                                 ),
                                 child: Row(
                                   children: [
-                                    Image.asset('assets/images/assigned_test.png', height: 50),
+                                    Image.asset('assets/images/mic_floating.png', height: 50),
                                     const SizedBox(width: 12),
                                     const Expanded(
                                       child: Column(
