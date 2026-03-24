@@ -14,21 +14,19 @@ class PracticeSessionList extends StatefulWidget {
 
 class _PracticeSessionListState extends State<PracticeSessionList>
     with WidgetsBindingObserver {
+
   final Stopwatch _stopwatch = Stopwatch();
   final GamificationService _gamificationService = GamificationService();
 
-  bool isShowingCompleted = false;
+  final PageController _pageController = PageController();
 
-  /// 🔥 Drag position (0 = left, 1 = right)
-  double _dragPosition = 0;
+  bool isShowingCompleted = false;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _stopwatch.start();
-
-    _dragPosition = isShowingCompleted ? 1 : 0;
   }
 
   @override
@@ -36,6 +34,7 @@ class _PracticeSessionListState extends State<PracticeSessionList>
     _stopwatch.stop();
     WidgetsBinding.instance.removeObserver(this);
     _saveSessionTime();
+    _pageController.dispose();
     super.dispose();
   }
 
@@ -60,203 +59,197 @@ class _PracticeSessionListState extends State<PracticeSessionList>
 
   @override
   Widget build(BuildContext context) {
-    final user = FirebaseAuth.instance.currentUser!;
-
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F5),
+      backgroundColor: const Color.fromARGB(255, 255, 255, 255),
       appBar: AppBar(
         title: const Text(
           "Assignments",
-          style: TextStyle(
-              color: Colors.black, fontWeight: FontWeight.bold),
+          style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
         ),
-        backgroundColor: const Color(0xFFF5F5F5),
+        backgroundColor: const Color.fromARGB(255, 255, 255, 255),
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.black),
       ),
       body: Column(
         children: [
 
-          /// 🔥 FIXED DRAGGABLE TOGGLE
+          /// 🔥 TOGGLE (SYNC WITH PAGEVIEW)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 12),
-            child: Center(
-              child: GestureDetector(
-                behavior: HitTestBehavior.translucent,
-                onHorizontalDragUpdate: (details) {
-                  setState(() {
-                    _dragPosition += details.primaryDelta! / 200;
-                    _dragPosition = _dragPosition.clamp(0.0, 1.0);
-                  });
-                },
-                onHorizontalDragEnd: (_) {
-                  setState(() {
-                    if (_dragPosition > 0.5) {
-                      _dragPosition = 1;
-                      isShowingCompleted = true;
-                    } else {
-                      _dragPosition = 0;
-                      isShowingCompleted = false;
-                    }
-                  });
-                },
-                child: Container(
-                  width: 260,
-                  height: 50,
-                  padding: const EdgeInsets.all(4),
-                  decoration: BoxDecoration(
-                    color: Colors.black,
-                    borderRadius: BorderRadius.circular(30),
+            child: Container(
+              width: 260,
+              height: 50,
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: Colors.black,
+                borderRadius: BorderRadius.circular(30),
+              ),
+              child: Stack(
+                children: [
+
+                  /// MOVING PILL
+                  AnimatedAlign(
+                    duration: const Duration(milliseconds: 200),
+                    alignment: isShowingCompleted
+                        ? Alignment.centerRight
+                        : Alignment.centerLeft,
+                    child: Container(
+                      width: 120,
+                      decoration: BoxDecoration(
+                        color: isShowingCompleted
+                            ? Colors.green
+                            : Colors.white,
+                        borderRadius: BorderRadius.circular(25),
+                      ),
+                    ),
                   ),
-                  child: Stack(
+
+                  /// TEXT
+                  Row(
                     children: [
 
-                      /// 🔥 MOVING PILL
-                      AnimatedPositioned(
-                        duration: const Duration(milliseconds: 200),
-                        curve: Curves.easeOut,
-                        left: _dragPosition * 120,
-                        top: 0,
-                        bottom: 0,
-                        child: Container(
-                          width: 120,
-                          decoration: BoxDecoration(
-                            color: _dragPosition > 0.5
-                                ? Colors.green
-                                : Colors.white,
-                            borderRadius: BorderRadius.circular(25),
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () {
+                            _pageController.animateToPage(
+                              0,
+                              duration: const Duration(milliseconds: 300),
+                              curve: Curves.easeInOut,
+                            );
+                          },
+                          child: Center(
+                            child: Text(
+                              "Incomplete",
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: isShowingCompleted
+                                    ? Colors.white70
+                                    : Colors.black,
+                              ),
+                            ),
                           ),
                         ),
                       ),
 
-                      /// TEXT
-                      Row(
-                        children: [
-
-                          /// INCOMPLETE
-                          Expanded(
-                            child: GestureDetector(
-                              onTap: () {
-                                setState(() {
-                                  _dragPosition = 0;
-                                  isShowingCompleted = false;
-                                });
-                              },
-                              child: Center(
-                                child: Text(
-                                  "Incomplete",
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: _dragPosition > 0.5
-                                        ? Colors.white70
-                                        : Colors.black,
-                                  ),
-                                ),
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () {
+                            _pageController.animateToPage(
+                              1,
+                              duration: const Duration(milliseconds: 300),
+                              curve: Curves.easeInOut,
+                            );
+                          },
+                          child: Center(
+                            child: Text(
+                              "Completed",
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: isShowingCompleted
+                                    ? Colors.white
+                                    : Colors.white70,
                               ),
                             ),
                           ),
-
-                          /// COMPLETED
-                          Expanded(
-                            child: GestureDetector(
-                              onTap: () {
-                                setState(() {
-                                  _dragPosition = 1;
-                                  isShowingCompleted = true;
-                                });
-                              },
-                              child: Center(
-                                child: Text(
-                                  "Completed",
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: _dragPosition > 0.5
-                                        ? Colors.white
-                                        : Colors.white70,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
                     ],
                   ),
-                ),
+                ],
               ),
             ),
           ),
 
-          /// 🔥 LIST (UNCHANGED)
+          /// 🔥 PAGEVIEW (MAIN CHANGE)
           Expanded(
-            child: StreamBuilder<QuerySnapshot>(
-              stream: FirebaseFirestore.instance
-                  .collection('assignments')
-                  .where('class_id', isEqualTo: widget.classId)
-                  .orderBy('created_at', descending: true)
-                  .snapshots(),
-              builder: (context, assignmentSnapshot) {
-                if (assignmentSnapshot.connectionState ==
-                    ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-
-                if (!assignmentSnapshot.hasData ||
-                    assignmentSnapshot.data!.docs.isEmpty) {
-                  return const Center(child: Text("No tasks assigned yet!"));
-                }
-
-                return StreamBuilder<QuerySnapshot>(
-                  stream: FirebaseFirestore.instance
-                      .collection('submissions')
-                      .where('student_id', isEqualTo: user.uid)
-                      .snapshots(),
-                  builder: (context, subSnapshot) {
-                    if (subSnapshot.connectionState ==
-                        ConnectionState.waiting) {
-                      return const Center(child: CircularProgressIndicator());
-                    }
-
-                    final submittedIds = subSnapshot.data?.docs
-                            .map((d) => (d.data()
-                                as Map<String, dynamic>)['assignment_id']
-                                .toString())
-                            .toSet() ??
-                        {};
-
-                    final filteredDocs =
-                        assignmentSnapshot.data!.docs.where((doc) {
-                      bool isDone = submittedIds.contains(doc.id);
-                      return isShowingCompleted ? isDone : !isDone;
-                    }).toList();
-
-                    if (filteredDocs.isEmpty) {
-                      return Center(
-                        child: Text(
-                          isShowingCompleted
-                              ? "No completed tasks yet!"
-                              : "All tasks completed! 🎉",
-                        ),
-                      );
-                    }
-
-                    return ListView.builder(
-                      padding: const EdgeInsets.all(15),
-                      itemCount: filteredDocs.length,
-                      itemBuilder: (context, index) {
-                        return AssignmentCard(
-                          assignmentDoc: filteredDocs[index],
-                          studentId: user.uid,
-                        );
-                      },
-                    );
-                  },
-                );
+            child: PageView(
+              controller: _pageController,
+              onPageChanged: (index) {
+                setState(() {
+                  isShowingCompleted = index == 1;
+                });
               },
+              children: [
+
+                /// INCOMPLETE PAGE
+                _buildAssignmentList(isCompletedPage: false),
+
+                /// COMPLETED PAGE
+                _buildAssignmentList(isCompletedPage: true),
+              ],
             ),
           ),
         ],
       ),
+    );
+  }
+
+  /// 🔥 LIST BUILDER (UNCHANGED LOGIC)
+  Widget _buildAssignmentList({required bool isCompletedPage}) {
+    final user = FirebaseAuth.instance.currentUser!;
+
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('assignments')
+          .where('class_id', isEqualTo: widget.classId)
+          .orderBy('created_at', descending: true)
+          .snapshots(),
+      builder: (context, assignmentSnapshot) {
+        if (assignmentSnapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        if (!assignmentSnapshot.hasData ||
+            assignmentSnapshot.data!.docs.isEmpty) {
+          return const Center(child: Text("No tasks assigned yet!"));
+        }
+
+        return StreamBuilder<QuerySnapshot>(
+          stream: FirebaseFirestore.instance
+              .collection('submissions')
+              .where('student_id', isEqualTo: user.uid)
+              .snapshots(),
+          builder: (context, subSnapshot) {
+            if (subSnapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
+
+            final submittedIds = subSnapshot.data?.docs
+                    .map((d) => (d.data()
+                        as Map<String, dynamic>)['assignment_id']
+                        .toString())
+                    .toSet() ??
+                {};
+
+            final filteredDocs =
+                assignmentSnapshot.data!.docs.where((doc) {
+              bool isDone = submittedIds.contains(doc.id);
+              return isCompletedPage ? isDone : !isDone;
+            }).toList();
+
+            if (filteredDocs.isEmpty) {
+              return Center(
+                child: Text(
+                  isCompletedPage
+                      ? "No completed tasks yet!"
+                      : "All tasks completed! 🎉",
+                ),
+              );
+            }
+
+            return ListView.builder(
+              padding: const EdgeInsets.all(15),
+              itemCount: filteredDocs.length,
+              itemBuilder: (context, index) {
+                return AssignmentCard(
+                  assignmentDoc: filteredDocs[index],
+                  studentId: user.uid,
+                );
+              },
+            );
+          },
+        );
+      },
     );
   }
 }

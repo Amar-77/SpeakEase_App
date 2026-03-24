@@ -258,121 +258,198 @@ class _PracticeRecordingSheetState extends State<PracticeRecordingSheet> {
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    // ... (YOUR EXISTING UI CODE IS PERFECT, NO CHANGES NEEDED HERE) ...
-    // Just keeping the structure short for copy-paste
-    return Scaffold(
-      backgroundColor: Colors.grey.shade50,
-      appBar: AppBar(
-        title: const Text("Practice Mode", style: TextStyle(color: Colors.black87, fontWeight: FontWeight.bold)),
-        centerTitle: true,
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-            icon: const Icon(Icons.close, color: Colors.black),
-            onPressed: () => Navigator.pop(context)
-        ),
+  // 🔴 EVERYTHING SAME ABOVE (imports, class, functions...)
+
+// 🔴 KEEP ALL YOUR IMPORTS & FUNCTIONS SAME ABOVE
+
+@override
+Widget build(BuildContext context) {
+  return Scaffold(
+    backgroundColor: Colors.grey.shade50,
+    appBar: AppBar(
+      title: const Text(" ",
+          style: TextStyle(color: Colors.black87, fontWeight: FontWeight.bold)),
+      centerTitle: true,
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      leading: IconButton(
+          icon: const Icon(Icons.close, color: Colors.black),
+          onPressed: () => Navigator.pop(context)
       ),
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 10.0),
-          child: Column(
-            children: [
-              Expanded(
-                child: _analysisResult != null
-                // VIEW A: RESULT
-                    ? SingleChildScrollView(
-                  child: Column(children: [
-                    DetailedResultView(
-                      overallScore: double.tryParse(_analysisResult!['quality_scores']['overall_score'].toString()) ?? 0,
-                      fluency: double.tryParse(_analysisResult!['quality_scores']['fluency'].toString()) ?? 0,
-                      pronunciation: double.tryParse(_analysisResult!['quality_scores']['pronunciation'].toString()) ?? 0,
-                      clarity: double.tryParse(_analysisResult!['quality_scores']['clarity'].toString()) ?? 0,
-                      accuracy: double.tryParse(_analysisResult!['transcription_metrics']['accuracy_from_wer'].toString().replaceAll('%','')) ?? 0,
-                      wpm: double.tryParse(_analysisResult!['transcription_metrics']['words_per_minute'].toString()) ?? 0,
-                      ageGroup: _analysisResult!['speaker_analysis']['predicted_age_group'] ?? "?",
-                      wordAnalysis: _analysisResult!['word_analysis'] ?? [],
-                      userTranscription: _analysisResult!['full_transcription'] ?? "",
-                    ),
-                    const SizedBox(height: 20),
-                    Row(children: [
-                      Expanded(child: OutlinedButton(
-                          onPressed: _retry,
-                          style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 15)),
-                          child: const Text("TRY AGAIN")
-                      )),
-                      const SizedBox(width: 15),
-                      Expanded(child: ElevatedButton(
-                          onPressed: _submitResults,
-                          style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, padding: const EdgeInsets.symmetric(vertical: 15)),
-                          child: const Text("SUBMIT RESULT", style: TextStyle(color: Colors.white))
-                      )),
-                    ])
-                  ]),
-                )
-                // VIEW B: RECORDING UI (Kept same as yours)
-                    : Column(
-                  children: [
+    ),
+    body: SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 10.0),
+        child: Column(
+          children: [
+            Expanded(
+              child: _analysisResult != null
+
+                  /// ================= RESULT VIEW (UNCHANGED) =================
+                  ? SingleChildScrollView(
+                child: Column(children: [
+                  DetailedResultView(
+                    overallScore: double.tryParse(_analysisResult!['quality_scores']['overall_score'].toString()) ?? 0,
+                    fluency: double.tryParse(_analysisResult!['quality_scores']['fluency'].toString()) ?? 0,
+                    pronunciation: double.tryParse(_analysisResult!['quality_scores']['pronunciation'].toString()) ?? 0,
+                    clarity: double.tryParse(_analysisResult!['quality_scores']['clarity'].toString()) ?? 0,
+                    accuracy: double.tryParse(_analysisResult!['transcription_metrics']['accuracy_from_wer'].toString().replaceAll('%','')) ?? 0,
+                    wpm: double.tryParse(_analysisResult!['transcription_metrics']['words_per_minute'].toString()) ?? 0,
+                    ageGroup: _analysisResult!['speaker_analysis']['predicted_age_group'] ?? "?",
+                    wordAnalysis: _analysisResult!['word_analysis'] ?? [],
+                    userTranscription: _analysisResult!['full_transcription'] ?? "",
+                  ),
+                  const SizedBox(height: 20),
+                  Row(children: [
                     Expanded(
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 300),
-                        width: double.infinity,
-                        decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(30),
-                            border: Border.all(
-                              color: _isSpeaking ? Colors.orange.shade300 : Colors.grey.shade200,
-                              width: _isSpeaking ? 3 : 1,
-                            ),
-                            boxShadow: [
-                              BoxShadow(color: _isSpeaking ? Colors.orange.withOpacity(0.2) : Colors.grey.shade200, blurRadius: 10)
-                            ]
+                      child: OutlinedButton(
+                        onPressed: _retry,
+                        style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 15)),
+                        child: const Text("TRY AGAIN"),
+                      ),
+                    ),
+                    const SizedBox(width: 15),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: _submitResults,
+                        style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.teal,
+                            padding: const EdgeInsets.symmetric(vertical: 15)),
+                        child: const Text("SUBMIT RESULT",
+                            style: TextStyle(color: Colors.white)),
+                      ),
+                    ),
+                  ])
+                ]),
+              )
+
+                  /// ================= FIXED RECORDING UI =================
+                  : SingleChildScrollView(
+                child: Column(
+                  children: [
+
+                    /// 🧒 IMAGE
+                    Stack(
+                      children: [
+                        Center(
+                          child: Image.asset(
+                            _isRecording
+                                ? "assets/images/kidduringrecordingog.png"
+                                : _isSpeaking
+                                ? "assets/images/kidduringttsog.png"
+                                : "assets/images/kidbeforettsog.png",
+                            height: 200,
+                            fit: BoxFit.contain,
+                          ),
                         ),
-                        child: Column(
-                          children: [
-                            // ... (YOUR EXISTING WIDGET CODE FOR TEXT & BADGE) ...
-                            Expanded(child: Center(child: SingleChildScrollView(child: Text(widget.referenceText, textAlign: TextAlign.center, style: TextStyle(fontSize: 26, color: _isSpeaking ? Colors.deepOrange.shade900 : Colors.black87))))),
-                          ],
+                     
+                      ],
+                    ),
+
+                    const SizedBox(height: 8),
+
+                    /// 📖 TEXT BOX
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEAEAEA),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        widget.referenceText,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: _isSpeaking
+                              ? Colors.red.shade700
+                              : Colors.black87,
+                          fontStyle: _isSpeaking
+                              ? FontStyle.italic
+                              : FontStyle.normal,
                         ),
                       ),
                     ),
-                    const SizedBox(height: 30),
-                    // CONTROLS
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 20.0),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: [
-                          _buildNeumorphicButton(icon: Icons.volume_up_rounded, label: "Listen", color: Colors.blueAccent, isActive: !_isRecording, onTap: _playTeacherVoice),
-                          GestureDetector(
-                            onTap: _isSpeaking ? null : _toggleRecording,
-                            child: AnimatedContainer(
-                              duration: const Duration(milliseconds: 200),
-                              height: 80, width: 80,
-                              decoration: BoxDecoration(
-                                  color: _isSpeaking ? Colors.grey.shade300 : (_isRecording ? Colors.red : Colors.white),
-                                  shape: BoxShape.circle,
-                                  border: Border.all(color: Colors.red.shade100, width: 4)
-                              ),
-                              child: Icon(_isRecording ? Icons.stop_rounded : Icons.mic_rounded, color: _isSpeaking ? Colors.grey : (_isRecording ? Colors.white : Colors.red), size: 40),
+
+                    const SizedBox(height: 40),
+
+                    /// 🔘 BUTTONS
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+
+                        /// 🔊 LISTEN
+                        GestureDetector(
+                          onTap: (!_isRecording && !_isSpeaking)
+                              ? _playTeacherVoice
+                              : null,
+                          child: Container(
+                            width: 120,
+                            height: 50,
+                            decoration: BoxDecoration(
+                              color: _isSpeaking
+                                  ? Colors.orange
+                                  : Colors.black,
+                              borderRadius: BorderRadius.circular(30),
+                            ),
+                            child: const Icon(Icons.volume_up,
+                                color: Colors.white),
+                          ),
+                        ),
+
+                        /// 🎤 MIC
+                        GestureDetector(
+                          onTap: _isSpeaking ? null : _toggleRecording,
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 250),
+                            width: 120,
+                            height: 50,
+                            decoration: BoxDecoration(
+                              color: _isRecording
+                                  ? Colors.red
+                                  : const Color(0xFF6BC96D),
+                              borderRadius: BorderRadius.circular(30),
+                            ),
+                            child: Icon(
+                              _isRecording ? Icons.stop : Icons.mic,
+                              color: Colors.white,
                             ),
                           ),
-                          _buildNeumorphicButton(icon: Icons.upload_file_rounded, label: "Upload", color: Colors.purpleAccent, isActive: !_isRecording && !_isSpeaking, onTap: _pickFile),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
+
+                    const SizedBox(height: 20),
+
+                    /// ANALYZE BUTTON
                     if (_audioPath != null)
-                      SizedBox(width: double.infinity, child: ElevatedButton(onPressed: _isAnalyzing ? null : _analyze, style: ElevatedButton.styleFrom(backgroundColor: Colors.black87, padding: const EdgeInsets.symmetric(vertical: 18)), child: _isAnalyzing ? const CircularProgressIndicator(color: Colors.white) : const Text("ANALYZE RECORDING", style: TextStyle(color: Colors.white))))
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: _isAnalyzing ? null : _analyze,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.black87,
+                            padding: const EdgeInsets.symmetric(vertical: 18),
+                          ),
+                          child: _isAnalyzing
+                              ? const CircularProgressIndicator(color: Colors.white)
+                              : const Text("ANALYZE RECORDING",
+                              style: TextStyle(color: Colors.white)),
+                        ),
+                      ),
+
+                    const SizedBox(height: 20),
                   ],
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildNeumorphicButton({required IconData icon, required String label, required Color color, required bool isActive, required VoidCallback onTap}) {
     return Column(children: [
