@@ -30,7 +30,7 @@ class AchievementsScreen extends StatelessWidget {
       id: 'streak_3',
       title: 'On Fire!',
       description: 'Reach a 3-day streak',
-      iconPath: 'assets/images/badge_fire.png', // You need to add these images
+      iconPath: 'assets/images/badge_fire.png',
       requiredValue: 3,
       type: 'streak',
     ),
