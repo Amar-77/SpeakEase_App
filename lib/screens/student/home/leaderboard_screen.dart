@@ -13,208 +13,248 @@ class LeaderboardScreen extends StatelessWidget {
     final currentUserUid = FirebaseAuth.instance.currentUser?.uid;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFFFF9C4), // Light Cream background
-      body: SafeArea(
-        child: Column(
-          children: [
-            // 1. 🔥 NEW SHARED APP BAR (Replaces standard AppBar)
-            const StudentAppBar(),
+      backgroundColor: const Color(0xFFFDF7E4), // Cream background for system status bar
+      body: Column(
+        children: [
+          // 1. 🔥 SHARED APP BAR
+          const SafeArea(
+            bottom: false,
+            child: StudentAppBar(),
+          ),
 
-            // 2. Title Section (Since we removed the standard AppBar title)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 15.0),
-              child: Text(
-                "Class Leaderboard",
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black87,
+          // 2. Main Content (Scrollable)
+          Expanded(
+            child: Stack(
+              children: [
+                // 🔥 THE UI FIX: A split background hidden behind the scroll view.
+                // When you pull down, you see the cream. When you pull up, you see white.
+                Column(
+                  children: [
+                    Container(height: 200, color: const Color(0xFFFDF7E4)), // Top Cream Buffer
+                    Expanded(child: Container(color: Colors.white)),        // Bottom White Buffer
+                  ],
                 ),
-              ),
-            ),
 
-            // 3. Main Content
-            Expanded(
-              child: StreamBuilder<QuerySnapshot>(
-                // Fetch ALL students (to include those with 0 coins)
-                stream: FirebaseFirestore.instance
-                    .collection('users')
-                    .where('class_id', isEqualTo: classId)
-                    .where('role', isEqualTo: 'student')
-                    .snapshots(),
-                builder: (context, snapshot) {
-                  if (snapshot.hasError) {
-                    return Center(child: Text("Error: ${snapshot.error}"));
-                  }
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
+                // 3. The actual foreground content
+                StreamBuilder<QuerySnapshot>(
+                  // Fetch ALL students in this class
+                  stream: FirebaseFirestore.instance
+                      .collection('users')
+                      .where('class_id', isEqualTo: classId)
+                      .where('role', isEqualTo: 'student')
+                      .snapshots(),
+                  builder: (context, snapshot) {
+                    if (snapshot.hasError) {
+                      return Center(child: Text("Error: ${snapshot.error}"));
+                    }
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
 
-                  final docs = snapshot.data!.docs;
-                  if (docs.isEmpty) {
-                    return const Center(child: Text("No students found in this class yet!"));
-                  }
+                    final docs = snapshot.data!.docs;
+                    if (docs.isEmpty) {
+                      return const Center(
+                          child: Text("No students found in this class yet!"));
+                    }
 
-                  // 4. Client-Side Sorting
-                  docs.sort((a, b) {
-                    final dataA = a.data() as Map<String, dynamic>;
-                    final dataB = b.data() as Map<String, dynamic>;
+                    // Sort by coins descending
+                    docs.sort((a, b) {
+                      final dataA = a.data() as Map<String, dynamic>;
+                      final dataB = b.data() as Map<String, dynamic>;
 
-                    int coinsA = dataA['speech_coins'] ?? 0;
-                    int coinsB = dataB['speech_coins'] ?? 0;
+                      int coinsA = dataA['speech_coins'] ?? 0;
+                      int coinsB = dataB['speech_coins'] ?? 0;
 
-                    return coinsB.compareTo(coinsA); // Descending
-                  });
+                      return coinsB.compareTo(coinsA);
+                    });
 
-                  final topThree = docs.take(3).toList();
-                  final restOfList = docs.skip(3).toList();
-
-                  return Column(
-                    children: [
-                      // --- PODIUM SECTION (Top 3) ---
-                      Container(
-                        padding: const EdgeInsets.fromLTRB(20, 10, 20, 30),
-                        decoration: const BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.only(
-                            bottomLeft: Radius.circular(40),
-                            bottomRight: Radius.circular(40),
+                    return SingleChildScrollView(
+                      physics: const BouncingScrollPhysics(),
+                      padding: const EdgeInsets.only(bottom: 120), // Room for bottom nav
+                      child: Column(
+                        children: [
+                          // --- 🏆 HERO PODIUM SECTION ---
+                          Container(
+                            width: double.infinity,
+                            decoration: const BoxDecoration(
+                              color: Color(0xFFFDF7E4), // Cream
+                              borderRadius: BorderRadius.vertical(
+                                bottom: Radius.circular(40),
+                              ),
+                            ),
+                            clipBehavior: Clip.hardEdge,
+                            child: _buildPodiumHero(),
                           ),
-                          boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, 5))],
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            // 2nd Place (Left)
-                            if (topThree.length >= 2)
-                              _buildPodiumSpot(context, topThree[1], 2, 140, Colors.grey.shade300),
-                            // 1st Place (Center)
-                            if (topThree.isNotEmpty)
-                              _buildPodiumSpot(context, topThree[0], 1, 180, const Color(0xFFFFD700)),
-                            // 3rd Place (Right)
-                            if (topThree.length >= 3)
-                              _buildPodiumSpot(context, topThree[2], 3, 120, const Color(0xFFCD7F32)),
-                          ],
-                        ),
+
+                          const SizedBox(height: 0),
+
+                          // --- 📋 RANK LIST ---
+                          ListView.builder(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            itemCount: docs.length,
+                            itemBuilder: (context, index) {
+                              final doc = docs[index];
+                              final studentData = doc.data() as Map<String, dynamic>;
+                              final rank = index + 1;
+                              final isMe = doc.id == currentUserUid;
+
+                              return _buildLeaderboardRow(studentData, rank, isMe);
+                            },
+                          ),
+                        ],
                       ),
-
-                      const SizedBox(height: 10),
-
-                      // --- RANK LIST (Everyone else) ---
-                      Expanded(
-                        child: ListView.builder(
-                          padding: const EdgeInsets.fromLTRB(20, 10, 20, 100), // Bottom padding for floating nav
-                          itemCount: restOfList.length,
-                          itemBuilder: (context, index) {
-                            final doc = restOfList[index];
-                            final studentData = doc.data() as Map<String, dynamic>;
-
-                            final rank = index + 4;
-                            final isMe = doc.id == currentUserUid;
-                            final coins = studentData['speech_coins'] ?? 0;
-
-                            return Container(
-                              margin: const EdgeInsets.only(bottom: 12),
-                              decoration: BoxDecoration(
-                                color: isMe ? Colors.purple.shade50 : Colors.white,
-                                borderRadius: BorderRadius.circular(15),
-                                border: isMe ? Border.all(color: Colors.purple, width: 2) : null,
-                                boxShadow: [
-                                  BoxShadow(color: Colors.grey.withOpacity(0.1), blurRadius: 5, offset: const Offset(0, 2))
-                                ],
-                              ),
-                              child: ListTile(
-                                leading: Container(
-                                  width: 40, height: 40,
-                                  alignment: Alignment.center,
-                                  decoration: BoxDecoration(
-                                    color: Colors.grey.shade100,
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: Text("#$rank", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey.shade700)),
-                                ),
-                                title: Text(
-                                  studentData['name'] ?? 'Unknown',
-                                  style: const TextStyle(fontWeight: FontWeight.bold),
-                                ),
-                                trailing: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFFFF9C4),
-                                    borderRadius: BorderRadius.circular(20),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      const Icon(Icons.monetization_on, color: Colors.amber, size: 18),
-                                      const SizedBox(width: 4),
-                                      Text("$coins", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black87)),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                    ],
-                  );
-                },
-              ),
+                    );
+                  },
+                ),
+              ],
             ),
-          ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ─── HERO IMAGE ONLY ─────────────────────────────────────────────────────────
+
+  Widget _buildPodiumHero() {
+    return Container(
+      width: double.infinity,
+      height: 280,
+      alignment: Alignment.center,
+      child: SizedBox(
+        width: 380, // Constrain width so it remains stable
+        height: 380,
+        // The 3D Podium Background Image
+        child: Transform.translate(
+          // Offset(X, Y)
+          // X: positive moves right, negative moves left
+          // Y: positive moves down, negative moves UP
+          offset: const Offset(0, -40), // 👈 Change -20 to whatever pixel amount looks best!
+          child: Image.asset(
+            'assets/images/leaderboard.png',
+            width: 150,
+            height: 100,
+            fit: BoxFit.cover,
+          ),
         ),
       ),
     );
   }
 
-  // Helper Widget for Podium Users (Kept EXACTLY same)
-  Widget _buildPodiumSpot(BuildContext context, DocumentSnapshot doc, int rank, double height, Color color) {
-    final data = doc.data() as Map<String, dynamic>;
-    final name = data['name'] ?? 'Student';
-    final coins = data['speech_coins'] ?? 0;
+  // ─── STYLIZED LIST ROWS ──────────────────────────────────────────────────────
 
-    String firstName = "S";
-    if (name.toString().isNotEmpty) {
-      firstName = name.toString().split(' ')[0];
+  Widget _buildLeaderboardRow(Map<String, dynamic> studentData, int rank, bool isMe) {
+    final name = studentData['name'] ?? 'Student';
+    final coins = studentData['speech_coins'] ?? 0;
+    String initial = name.toString().isNotEmpty ? name.toString()[0].toUpperCase() : "S";
+
+    // 🎨 Determine card color based on the reference image
+    Color bgColor;
+    if (rank == 1) {
+      bgColor = const Color(0xFFF3E5F5); // Light Purple
+    } else if (rank == 2) {
+      bgColor = const Color(0xFFFBF4D4); // Cream/Yellow
+    } else if (rank == 3) {
+      bgColor = const Color(0xFFE1F5FE); // Light Blue
+    } else if (rank % 2 == 0) {
+      bgColor = const Color(0xFFF3E5F5); // Alternate Purple
+    } else {
+      bgColor = const Color(0xFFFBF4D4); // Alternate Cream
     }
 
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.end,
-      children: [
-        CircleAvatar(
-          radius: rank == 1 ? 35 : 25,
-          backgroundColor: color,
-          child: CircleAvatar(
-            radius: rank == 1 ? 32 : 22,
-            backgroundColor: Colors.white,
-            backgroundImage: const NetworkImage("https://ui-avatars.com/api/?background=random"),
-            child: Text(firstName.isNotEmpty ? firstName[0] : "S", style: const TextStyle(fontWeight: FontWeight.bold)),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+      child: Row(
+        children: [
+          // Medal or Number
+          SizedBox(
+            width: 40,
+            child: _buildRankBadge(rank),
           ),
-        ),
-        const SizedBox(height: 8),
-        Text(firstName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.monetization_on, size: 12, color: Colors.amber),
-            Text("$coins", style: const TextStyle(fontSize: 12, color: Colors.grey)),
-          ],
-        ),
-        const SizedBox(height: 8),
-        Container(
-          width: rank == 1 ? 90 : 70,
-          height: height * 0.6,
-          decoration: BoxDecoration(
-            color: color.withOpacity(0.3),
-            borderRadius: const BorderRadius.only(topLeft: Radius.circular(10), topRight: Radius.circular(10)),
-            border: Border.all(color: color, width: 2),
+
+          const SizedBox(width: 8),
+
+          // Pill Card
+          Expanded(
+            child: Container(
+              height: 84, // Sleek pill height
+              decoration: BoxDecoration(
+                color: bgColor,
+                borderRadius: BorderRadius.circular(32), // Completely rounded edges
+                border: isMe ? Border.all(color: Colors.black12, width: 2) : null,
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                children: [
+                  // Avatar inside pill
+                  CircleAvatar(
+                    radius: 16,
+                    backgroundColor: Colors.white,
+                    child: Text(
+                      initial,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+
+                  // Name
+                  Expanded(
+                    child: Text(
+                      name,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.black87,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+
+                  // Coin & Score
+                  Row(
+                    children: [
+                      const Icon(Icons.monetization_on, color: Colors.amber, size: 18),
+                      const SizedBox(width: 6),
+                      Text(
+                        "$coins",
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87,
+                        ),
+                      ),
+                    ],
+                  )
+                ],
+              ),
+            ),
           ),
-          alignment: Alignment.center,
-          child: Text("$rank", style: TextStyle(fontSize: 40, fontWeight: FontWeight.bold, color: color.withOpacity(0.8))),
+        ],
+      ),
+    );
+  }
+
+  // Beautiful badges for 1st, 2nd, 3rd, and plain text for the rest
+  Widget _buildRankBadge(int rank) {
+    if (rank == 1) return const Center(child: Text("🥇", style: TextStyle(fontSize: 26)));
+    if (rank == 2) return const Center(child: Text("🥈", style: TextStyle(fontSize: 26)));
+    if (rank == 3) return const Center(child: Text("🥉", style: TextStyle(fontSize: 26)));
+
+    return Center(
+      child: Text(
+        "$rank",
+        style: const TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.w600,
+          color: Colors.black54,
         ),
-      ],
+      ),
     );
   }
 }
