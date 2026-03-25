@@ -35,17 +35,17 @@ class _SignupScreenState extends State<SignupScreen> {
       classId: _classIdController.text.trim(),
     );
 
+    // 🛑 SAFETY CHECK: Check if the screen is still active
+    if (!mounted) return;
+
     setState(() => _isLoading = false);
 
     if (error == null) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Account Created!")));
-        Navigator.pop(context); // Go back to Login
-      }
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Account Created!")));
+      // AuthGate has already swapped the root to Home. We just pop this signup overlay!
+      Navigator.pop(context);
     } else {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error), backgroundColor: Colors.red));
-      }
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error), backgroundColor: Colors.red));
     }
   }
 
