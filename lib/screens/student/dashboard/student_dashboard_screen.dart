@@ -1,299 +1,497 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter_svg/svg.dart';
 import 'package:intl/intl.dart';
-import 'package:speakease/screens/student/dashboard/weekly_summary.dart';
-import '../chat/speaky_screen.dart';
 
-class StudentDashboardScreen extends StatelessWidget {
+// Adjust these paths to match your actual project structure
+import '../chat/speaky_screen.dart';
+import '../home/achievements_screen.dart';
+import 'word_practice_screen.dart'; // 👈 Added import for navigation
+
+class StudentDashboardScreen extends StatefulWidget {
   const StudentDashboardScreen({super.key});
+
+  @override
+  State<StudentDashboardScreen> createState() => _StudentDashboardScreenState();
+}
+
+class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
+  // Week offset: 0 = this week, 1 = last week, etc.
+  int _weekOffset = 0;
+
+  // Slide-to-summarize state
+  bool _summaryUnlocked = false;
+  double _sliderValue = 0.0;
+
+  // Cache loaded data
+  Map<String, int> _weeklyData = {};
+  Map<String, double> _metrics = {};
+  int _totalCoins = 0;
+  List<String> _mistakeWords = [];
+  bool _loadingStats = false;
+
+  late String _uid;
+
+  @override
+  void initState() {
+    super.initState();
+    _uid = FirebaseAuth.instance.currentUser!.uid;
+    _loadAllData();
+  }
+
+  // ─── DATE HELPERS ────────────────────────────────────────────────────────────
+
+  DateTime get _endDate =>
+      DateTime.now().subtract(Duration(days: _weekOffset * 7));
+
+  DateTime get _startDate => _endDate.subtract(const Duration(days: 6));
+
+  String get _weekLabel {
+    if (_weekOffset == 0) return "This week";
+    return "${DateFormat('MMM d').format(_startDate)} - ${DateFormat('MMM d').format(_endDate)}";
+  }
+
+  // ─── DATA LOADING ─────────────────────────────────────────────────────────────
+
+  Future<void> _loadAllData() async {
+    if (!mounted) return;
+    setState(() => _loadingStats = true);
+    await Future.wait([
+      _loadWeeklyChart(),
+      _loadMetrics(),
+      _loadCoins(),
+      _loadMistakeWords(),
+    ]);
+    if (mounted) setState(() => _loadingStats = false);
+  }
+
+  Future<void> _loadWeeklyChart() async {
+    List<DateTime> days =
+    List.generate(7, (i) => _startDate.add(Duration(days: i)));
+    List<String> dateKeys =
+    days.map((d) => "${d.year}-${d.month}-${d.day}").toList();
+
+    Map<String, int> map = {
+      "Mon": 0, "Tue": 0, "Wed": 0, "Thu": 0,
+      "Fri": 0, "Sat": 0, "Sun": 0,
+    };
+
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(_uid)
+          .collection('daily_stats')
+          .where(FieldPath.documentId, whereIn: dateKeys)
+          .get();
+
+      for (var doc in snap.docs) {
+        var data = doc.data();
+        String dateStr = data['date'] ?? doc.id;
+        num raw = data['minutes_spent'] ?? 0;
+        List<String> parts = dateStr.split('-');
+        DateTime date = DateTime(
+            int.parse(parts[0]), int.parse(parts[1]), int.parse(parts[2]));
+        String dayName = DateFormat('E').format(date);
+        map[dayName] = raw.round();
+      }
+    } catch (e) {
+      debugPrint("Chart error: $e");
+    }
+    _weeklyData = map;
+  }
+
+  Future<void> _loadMetrics() async {
+    final Timestamp start = Timestamp.fromDate(_startDate);
+    final Timestamp end =
+    Timestamp.fromDate(_endDate.add(const Duration(days: 1)));
+
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('submissions')
+          .where('student_id', isEqualTo: _uid)
+          .where('submitted_at', isGreaterThanOrEqualTo: start)
+          .where('submitted_at', isLessThanOrEqualTo: end)
+          .get();
+
+      if (snap.docs.isEmpty) {
+        _metrics = {};
+        return;
+      }
+
+      double acc = 0, flu = 0, clar = 0, pron = 0, wpm = 0;
+      for (var doc in snap.docs) {
+        var d = doc.data();
+        acc += (d['accuracy_score'] ?? 0).toDouble();
+        flu += (d['fluency_score'] ?? 0).toDouble();
+        clar += (d['clarity_score'] ?? 0).toDouble();
+        pron += (d['pronunciation_score'] ?? 0).toDouble();
+        wpm += (d['wpm'] ?? 0).toDouble();
+      }
+      int c = snap.docs.length;
+      _metrics = {
+        'accuracy': acc / c,
+        'fluency': flu / c,
+        'clarity': clar / c,
+        'pronunciation': pron / c,
+        'wpm': wpm / c,
+      };
+    } catch (e) {
+      debugPrint("Metrics error: $e");
+    }
+  }
+
+  Future<void> _loadCoins() async {
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(_uid)
+          .collection('daily_stats')
+          .get();
+      int total = 0;
+      for (var doc in snap.docs) {
+        total += (doc.data()['coins_earned'] as int? ?? 0);
+      }
+      _totalCoins = total;
+    } catch (e) {
+      debugPrint("Coins error: $e");
+    }
+  }
+
+  Future<void> _loadMistakeWords() async {
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(_uid)
+          .get();
+      var data = doc.data();
+      _mistakeWords = List<String>.from(data?['mistake_words'] ?? []);
+    } catch (e) {
+      debugPrint("Words error: $e");
+    }
+  }
+
+  void _changeWeek(int delta) {
+    int newOffset = _weekOffset + delta;
+    if (newOffset < 0) return;
+    setState(() {
+      _weekOffset = newOffset;
+      _summaryUnlocked = false;
+      _sliderValue = 0.0;
+    });
+    _loadAllData();
+  }
+
+  // ─── NAVIGATION ──────────────────────────────────────────────────────────────
+
+  void _navigateToWordPractice() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => WordPracticeScreen(
+          mistakeWords: _mistakeWords,
+          studentId: _uid,
+        ),
+      ),
+    );
+  }
+
+  // ─── BUILD ────────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser!;
-    String displayName = user.displayName?.split(' ')[0] ?? "Student";
+    String firstName = user.displayName?.split(' ')[0] ?? "Student";
 
     return Scaffold(
-      backgroundColor: Colors.grey[50],
-      appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text("Dashboard", style: TextStyle(color: Colors.black, fontSize: 20, fontWeight: FontWeight.bold)),
-            Text("Welcome back, $displayName 👋", style: const TextStyle(color: Colors.grey, fontSize: 14)),
-          ],
-        ),
-        backgroundColor: Colors.white,
-        elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.black),
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // --- 1. SPEAKY AI CARD ---
-            _buildSpeakyCard(context),
-            const SizedBox(height: 25),
+      backgroundColor: const Color(0xFFF5F5F7),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // ── Header ──
+              _buildHeader(firstName),
+              const SizedBox(height: 20),
 
-            // --- 2. WEEKLY ACTIVITY CHART (Updated UI) ---
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text("Weekly Activity", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                // Dynamic Date Range Display (e.g., "Feb 12 - Feb 18")
-                Text("This Week", style: const TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.w600)),
-              ],
-            ),
-            const SizedBox(height: 15),
+              // ── Week Navigator + Bar Chart ──
+              _buildWeekNav(),
+              const SizedBox(height: 12),
+              _buildBarChart(),
+              const SizedBox(height: 24),
 
-            FutureBuilder<Map<String, int>>(
-              future: _fetchCurrentWeekStats(user.uid), // 👈 NEW FUNCTION
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const SizedBox(height: 200, child: Center(child: CircularProgressIndicator()));
-                }
-                if (snapshot.hasError) {
-                  return _buildErrorCard("Could not load stats");
-                }
+              // ── Speaky Slide Card ──
+              _summaryUnlocked ? _buildUnlockedSummary() : _buildSpeakySlideCard(),
+              const SizedBox(height: 24),
 
-                Map<String, int> weeklyData = snapshot.data ?? {};
-                // Calculate total minutes for THIS week only
-                int totalMinutes = weeklyData.values.fold(0, (sum, val) => sum + val);
+              // ── SpeechCoins ──
+              _buildCoinBanner(),
+              const SizedBox(height: 16),
 
-                return Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(20),
-                    boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
-                  ),
-                  child: Column(
-                    children: [
-                      // Total Counter
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(color: Colors.blue[50], borderRadius: BorderRadius.circular(10)),
-                            child: const Icon(Icons.timer, color: Colors.blue),
-                          ),
-                          const SizedBox(width: 15),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text("$totalMinutes mins", style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-                              const Text("Practice this week", style: TextStyle(color: Colors.grey, fontSize: 12)),
-                            ],
-                          )
-                        ],
-                      ),
-                      const SizedBox(height: 20),
-                      const Divider(),
-                      const SizedBox(height: 10),
-
-                      // The Bar Chart (Mon - Sun)
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          _buildBar("Mon", weeklyData['Mon'] ?? 0, 45, Colors.blue),
-                          _buildBar("Tue", weeklyData['Tue'] ?? 0, 45, Colors.blue),
-                          _buildBar("Wed", weeklyData['Wed'] ?? 0, 45, Colors.blue),
-                          _buildBar("Thu", weeklyData['Thu'] ?? 0, 45, Colors.blue),
-                          _buildBar("Fri", weeklyData['Fri'] ?? 0, 45, Colors.blue),
-                          _buildBar("Sat", weeklyData['Sat'] ?? 0, 45, Colors.orange),
-                          _buildBar("Sun", weeklyData['Sun'] ?? 0, 45, Colors.orange),
-                        ],
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
-
-            const SizedBox(height: 20),
-
-            // Weekly Summary Button
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton(
-                onPressed: () {
-                  Navigator.push(context, MaterialPageRoute(builder: (_) => const WeeklySummaryScreen()));
-                },
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 15),
-                  side: BorderSide(color: Colors.grey.shade300),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-                child: const Text("View Detailed History", style: TextStyle(color: Colors.black)),
-              ),
-            ),
-
-            const SizedBox(height: 30),
-
-            // --- 3. FOCUS AREAS ---
-            const Text("Your Focus Areas", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 15),
-            _buildStatRow("Fluency", 75, Colors.purple),
-            _buildStatRow("Pronunciation", 60, Colors.pink),
-            _buildStatRow("Vocabulary", 45, Colors.teal),
-            const SizedBox(height: 40),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // --- 🛠️ FIXED: Safe Double-to-Int Conversion ---
-  Future<Map<String, int>> _fetchCurrentWeekStats(String uid) async {
-    DateTime now = DateTime.now();
-
-    // 1. Find the Monday of the current week
-    DateTime startOfWeek = now.subtract(Duration(days: now.weekday - 1));
-
-    // 2. Generate keys (Mon-Sun)
-    List<String> weekDates = [];
-    for (int i = 0; i < 7; i++) {
-      DateTime day = startOfWeek.add(Duration(days: i));
-      weekDates.add("${day.year}-${day.month}-${day.day}");
-    }
-
-    // 3. Initialize all to 0
-    Map<String, int> statsMap = {
-      "Mon": 0, "Tue": 0, "Wed": 0, "Thu": 0, "Fri": 0, "Sat": 0, "Sun": 0
-    };
-
-    try {
-      QuerySnapshot snapshot = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .collection('daily_stats')
-          .where(FieldPath.documentId, whereIn: weekDates)
-          .get();
-
-      for (var doc in snapshot.docs) {
-        var data = doc.data() as Map<String, dynamic>;
-        String dateStr = data['date'];
-
-        // ⚠️ THE FIX: Use 'num' instead of 'int' to accept Doubles (5.5)
-        num rawMinutes = data['minutes_spent'] ?? 0;
-        int minutes = rawMinutes.round(); // Safely convert to Int
-
-        // Parse date to get the day name
-        List<String> parts = dateStr.split('-');
-        DateTime date = DateTime(int.parse(parts[0]), int.parse(parts[1]), int.parse(parts[2]));
-        String dayName = DateFormat('E').format(date);
-
-        statsMap[dayName] = minutes;
-      }
-    } catch (e) {
-      debugPrint("Stats Error: $e");
-    }
-
-    return statsMap;
-  }
-
-  // Helper to show the date range string (e.g., "Feb 10 - Feb 16")
-  String _getWeekRangeString() {
-    DateTime now = DateTime.now();
-    DateTime startOfWeek = now.subtract(Duration(days: now.weekday - 1));
-    DateTime endOfWeek = startOfWeek.add(const Duration(days: 6));
-    return "${DateFormat('MMM d').format(startOfWeek)} - ${DateFormat('MMM d').format(endOfWeek)}";
-  }
-
-  // --- WIDGET HELPERS (Unchanged mostly) ---
-
-  Widget _buildSpeakyCard(BuildContext context) {
-    return GestureDetector(
-      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SpeakyChatScreen())),
-      child: Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(colors: [Colors.blue.shade800, Colors.blue.shade500]),
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [BoxShadow(color: Colors.blue.withOpacity(0.3), blurRadius: 10, offset: const Offset(0, 5))],
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), shape: BoxShape.circle),
-              child: const Icon(Icons.mic, color: Colors.white, size: 30),
-            ),
-            const SizedBox(width: 15),
-            const Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text("Talk with Speaky AI", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-                  SizedBox(height: 5),
-                  Text("Practice conversation & get instant feedback.", style: TextStyle(color: Colors.white70, fontSize: 12)),
-                ],
-              ),
-            ),
-            const Icon(Icons.arrow_forward_ios, color: Colors.white70, size: 16),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildBar(String day, int minutes, int max, Color color) {
-    // Cap at 1.0 (100%) but show full bar if over
-    double heightFactor = (minutes / max).clamp(0.0, 1.0);
-    double displayHeight = 100 * heightFactor;
-
-    // Min height 4 so 0 isn't invisible
-    if (displayHeight < 4) displayHeight = 4;
-
-    bool isToday = DateFormat('E').format(DateTime.now()) == day;
-
-    return Column(
-      children: [
-        // Tooltip showing exact minutes
-        Text(
-            minutes > 0 ? "$minutes" : "",
-            style: TextStyle(fontSize: 10, color: Colors.grey[600], fontWeight: FontWeight.bold)
-        ),
-        const SizedBox(height: 4),
-        Container(
-          width: 12,
-          height: displayHeight,
-          decoration: BoxDecoration(
-            color: isToday ? Colors.green : color.withOpacity(0.7),
-            borderRadius: BorderRadius.circular(6),
+              // ── Achievements Navigation ──
+              _buildAchievementsBanner(context),
+              const SizedBox(height: 20),
+            ],
           ),
         ),
-        const SizedBox(height: 8),
-        Text(day, style: TextStyle(fontSize: 12, fontWeight: isToday ? FontWeight.bold : FontWeight.normal, color: isToday ? Colors.green : Colors.grey)),
+      ),
+    );
+  }
+
+  // ─── HEADER ──────────────────────────────────────────────────────────────────
+
+  Widget _buildHeader(String name) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Row(
+          children: [
+            // 🔙 Custom Back Button
+            GestureDetector(
+              onTap: () => Navigator.pop(context),
+              child: Container(
+                padding: const EdgeInsets.all(10),
+                margin: const EdgeInsets.only(right: 16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    )
+                  ],
+                ),
+                child: const Icon(
+                  Icons.arrow_back_ios_new,
+                  size: 20,
+                  color: Colors.black87,
+                ),
+              ),
+            ),
+
+            // Titles
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text("Your Dashboard",
+                    style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black)),
+                const SizedBox(height: 2),
+                Text(_weekLabel,
+                    style: const TextStyle(fontSize: 13, color: Colors.grey)),
+              ],
+            ),
+          ],
+        ),
       ],
     );
   }
 
-  Widget _buildStatRow(String label, int percentage, Color color) {
+  // ─── WEEK NAV ─────────────────────────────────────────────────────────────────
+
+  Widget _buildWeekNav() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.end,
+      children: [
+        GestureDetector(
+          onTap: () => _changeWeek(1),
+          child: const Icon(Icons.chevron_left, size: 20, color: Colors.grey),
+        ),
+        const SizedBox(width: 6),
+        Text(
+          "${DateFormat('MMM d').format(_startDate)} - ${DateFormat('MMM d').format(_endDate)}",
+          style: const TextStyle(
+              fontSize: 12, color: Colors.grey, fontWeight: FontWeight.w600),
+        ),
+        const SizedBox(width: 6),
+        GestureDetector(
+          onTap: _weekOffset == 0 ? null : () => _changeWeek(-1),
+          child: Icon(Icons.chevron_right,
+              size: 20,
+              color: _weekOffset == 0 ? Colors.grey.shade300 : Colors.grey),
+        ),
+      ],
+    );
+  }
+
+  // ─── BAR CHART ───────────────────────────────────────────────────────────────
+
+  Widget _buildBarChart() {
+    final days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+    final int maxVal = _weeklyData.values.fold(1, (m, v) => v > m ? v : m);
+
     return Container(
-      margin: const EdgeInsets.only(bottom: 15),
-      padding: const EdgeInsets.all(15),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(15)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      padding: const EdgeInsets.fromLTRB(12, 20, 12, 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.06),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          )
+        ],
+      ),
+      child: _loadingStats
+          ? const SizedBox(
+        height: 140,
+        child: Center(child: CircularProgressIndicator()),
+      )
+          : SizedBox(
+        height: 160,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final barWidth = constraints.maxWidth / 9;
+
+            return Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: days.map((day) {
+                int val = _weeklyData[day] ?? 0;
+                double frac = maxVal == 0 ? 0 : val / maxVal;
+
+                // Match colors exactly to the reference image
+                bool isWeekend = day == "Sat" || day == "Sun";
+                Color activeColor = isWeekend
+                    ? const Color(0xFFFF8B8B) // Soft salmon red
+                    : const Color(0xFF918CFF); // Soft periwinkle purple
+
+                double barHeight = 0;
+                if (frac > 0) {
+                  barHeight = 110.0 * frac;
+                  if (barHeight < barWidth) {
+                    barHeight = barWidth;
+                  }
+                }
+
+                return Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      // 🟣 BAR BACKGROUND
+                      Stack(
+                        alignment: Alignment.bottomCenter,
+                        children: [
+                          // background capsule
+                          Container(
+                            width: barWidth,
+                            height: 110,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFEEEEEE), // Softer background grey
+                              borderRadius: BorderRadius.circular(100),
+                            ),
+                          ),
+
+                          // animated fill
+                          AnimatedContainer(
+                            duration: const Duration(milliseconds: 400),
+                            curve: Curves.easeOut,
+                            width: barWidth,
+                            height: barHeight,
+                            decoration: BoxDecoration(
+                              color: activeColor,
+                              borderRadius: BorderRadius.circular(100),
+                            ),
+                          ),
+                        ],
+                      ),
+
+                      const SizedBox(height: 8),
+
+                      // day label
+                      Text(
+                        day,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: Color(0xFF8A8A8A), // Softer grey
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  // ─── SPEAKY SLIDE CARD ───────────────────────────────────────────────────────
+
+  Widget _buildSpeakySlideCard() {
+    const double cardHeight = 450;
+    const double avatarBreakout = 60;
+    const double avatarHeight = 360;
+
+    return SizedBox(
+      height: cardHeight + avatarBreakout,
+      child: Stack(
+        clipBehavior: Clip.none,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
-              Text("$percentage%", style: TextStyle(color: color, fontWeight: FontWeight.bold)),
-            ],
+          // 1. 🟡 The Yellow Background Card
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            top: avatarBreakout,
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF6BC57),
+                borderRadius: BorderRadius.circular(32),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFFF6BC57).withOpacity(0.4),
+                    blurRadius: 18,
+                    offset: const Offset(0, 6),
+                  )
+                ],
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  const Text("Meet Speaky!",
+                      style: TextStyle(
+                          color: Colors.black87,
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 6),
+                  const Text(
+                      "Our personal assistant, she will help you\nsummarize your usage data",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                          color: Color(0xAA000000),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          height: 1.3)),
+                  const SizedBox(height: 24),
+                  // The slide button
+                  _buildSlider(),
+                ],
+              ),
+            ),
           ),
-          const SizedBox(height: 10),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(10),
-            child: LinearProgressIndicator(
-              value: percentage / 100,
-              backgroundColor: color.withOpacity(0.1),
-              valueColor: AlwaysStoppedAnimation<Color>(color),
-              minHeight: 8,
+
+          // 2. 🤖 Speaky Avatar
+          Positioned(
+            top: 0,
+            right: 0,
+            left: 0,
+            child: Center(
+              child: Image.asset(
+                'assets/images/speaky_analysing.png',
+                height: avatarHeight,
+                fit: BoxFit.contain,
+              ),
             ),
           ),
         ],
@@ -301,11 +499,496 @@ class StudentDashboardScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildErrorCard(String msg) {
+  Widget _buildSlider() {
+    return LayoutBuilder(builder: (context, constraints) {
+      double trackWidth = constraints.maxWidth;
+      double thumbSize = 56.0;
+      double maxSlide = trackWidth - thumbSize;
+
+      return GestureDetector(
+        onHorizontalDragUpdate: (details) {
+          setState(() {
+            _sliderValue =
+                (_sliderValue + details.delta.dx / maxSlide).clamp(0.0, 1.0);
+          });
+          if (_sliderValue >= 0.85) {
+            setState(() {
+              _summaryUnlocked = true;
+              _sliderValue = 1.0;
+            });
+          }
+        },
+        onHorizontalDragEnd: (_) {
+          if (_sliderValue < 0.85) {
+            setState(() => _sliderValue = 0.0);
+          }
+        },
+        child: Container(
+          height: 56,
+          width: trackWidth,
+          decoration: BoxDecoration(
+            color: const Color(0xFF333333),
+            borderRadius: BorderRadius.circular(30),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.15),
+                blurRadius: 4,
+                offset: const Offset(0, 2),
+              )
+            ],
+          ),
+          child: Stack(
+            children: [
+              Center(
+                child: Text(
+                  "Slide to summarize",
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.6),
+                    fontWeight: FontWeight.w500,
+                    fontSize: 15,
+                  ),
+                ),
+              ),
+              Positioned(
+                left: _sliderValue * maxSlide,
+                top: 0,
+                bottom: 0,
+                child: Container(
+                  width: thumbSize,
+                  margin: const EdgeInsets.all(2),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.grey.shade300, width: 0.5),
+                  ),
+                  child: Center(
+                    child: SvgPicture.asset(
+                      'assets/icons/ai_icon.svg',
+                      width: 24,
+                      height: 24,
+                      colorFilter: const ColorFilter.mode(Colors.black, BlendMode.srcIn),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    });
+  }
+
+  // ─── UNLOCKED SUMMARY ────────────────────────────────────────────────────────
+
+  Widget _buildUnlockedSummary() {
+    if (_loadingStats) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    double fluency = _metrics['fluency'] ?? 0;
+    double pronunciation = _metrics['pronunciation'] ?? 0;
+    double clarity = _metrics['clarity'] ?? 0;
+    double accuracy = _metrics['accuracy'] ?? 0;
+    double wpm = _metrics['wpm'] ?? 0;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: _buildBigRing(
+                  "Overall\nProgress", accuracy, const Color(0xFFFFC107)),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                children: [
+                  _buildSmallRing(
+                      "Overall\nFluency", fluency, const Color(0xFF7B72F0)),
+                  const SizedBox(height: 12),
+                  _buildSmallRing("Overall\nPronunciation", pronunciation,
+                      const Color(0xFF7B72F0)),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+                child: _buildSmallRing(
+                    "Overall\nclarity", clarity, const Color(0xFFFF8B8B))),
+            const SizedBox(width: 12),
+            Expanded(child: _buildWpmCard(wpm)),
+          ],
+        ),
+        const SizedBox(height: 12),
+        _buildMasteryHub(),
+        const SizedBox(height: 6),
+        Center(
+          child: TextButton.icon(
+            onPressed: () => setState(() {
+              _summaryUnlocked = false;
+              _sliderValue = 0.0;
+            }),
+            icon: const Icon(Icons.refresh, size: 16),
+            label: const Text("Hide Summary"),
+            style: TextButton.styleFrom(foregroundColor: Colors.grey),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildBigRing(String label, double value, Color color) {
+    double pct = value.clamp(0, 100);
     return Container(
-      height: 150, width: double.infinity,
-      decoration: BoxDecoration(color: Colors.red[50], borderRadius: BorderRadius.circular(20)),
-      child: Center(child: Text(msg, style: TextStyle(color: Colors.red[800]))),
+      height: 194, // Perfect height to align with the right-side cards
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 15,
+            offset: const Offset(0, 8),
+          )
+        ],
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          SizedBox(
+            width: 110, // Larger overall diameter
+            height: 110,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                // Clean, flat progress ring (No overlapping shadow masks)
+                SizedBox(
+                  width: 110,
+                  height: 110,
+                  child: CircularProgressIndicator(
+                    value: pct / 100,
+                    strokeWidth: 14, // Thick and chunky
+                    backgroundColor: const Color(0xFFEEEEEE), // Crisp, light grey track
+                    valueColor: AlwaysStoppedAnimation<Color>(color),
+                    strokeCap: StrokeCap.round,
+                  ),
+                ),
+                // Styled Dual-Size Text (Big Number, Small %)
+                RichText(
+                  text: TextSpan(
+                    children: [
+                      TextSpan(
+                        text: "${pct.toStringAsFixed(0)}",
+                        style: const TextStyle(
+                          fontSize: 32, // Large number
+                          fontWeight: FontWeight.w700,
+                          color: Colors.black87,
+                        ),
+                      ),
+                      const TextSpan(
+                        text: "%",
+                        style: TextStyle(
+                          fontSize: 16, // Smaller percentage sign
+                          fontWeight: FontWeight.w600,
+                          color: Colors.black54,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Spacer(),
+          Text(label,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                  height: 1.2)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSmallRing(String label, double value, Color color) {
+    double pct = value.clamp(0, 100);
+    return Container(
+      height: 86,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 15,
+            offset: const Offset(0, 8),
+          )
+        ],
+      ),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 52,
+            height: 52,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                SizedBox(
+                  width: 52,
+                  height: 52,
+                  child: CircularProgressIndicator(
+                    value: pct / 100,
+                    strokeWidth: 7, // Thicker small ring
+                    backgroundColor: const Color(0xFFEEEEEE),
+                    valueColor: AlwaysStoppedAnimation<Color>(color),
+                    strokeCap: StrokeCap.round,
+                  ),
+                ),
+                // Dual-Size Text for small ring
+                RichText(
+                  text: TextSpan(
+                    children: [
+                      TextSpan(
+                        text: "${pct.toStringAsFixed(0)}",
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.black87,
+                        ),
+                      ),
+                      const TextSpan(
+                        text: "%",
+                        style: TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.black54,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Text(label,
+                style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
+                    height: 1.2)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWpmCard(double wpm) {
+    return Container(
+      height: 87,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF7B72F0),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+              color: const Color(0xFF7B72F0).withOpacity(0.4),
+              blurRadius: 12,
+              offset: const Offset(0, 4))
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Text(wpm.toStringAsFixed(0),
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 30,
+                      fontWeight: FontWeight.bold)),
+              const SizedBox(width: 4),
+              const Text("WPM",
+                  style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600)),
+            ],
+          ),
+          const Spacer(),
+          const Text("Reading Speed",
+              style: TextStyle(color: Colors.white60, fontSize: 11)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMasteryHub() {
+    return GestureDetector(
+      // 👈 Updated onTap implementation here
+      onTap: _mistakeWords.isEmpty
+          ? null
+          : () => _navigateToWordPractice(),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+              colors: [Colors.orange.shade400, Colors.red.shade400]),
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+                color: Colors.orange.withOpacity(0.3),
+                blurRadius: 12,
+                offset: const Offset(0, 4))
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(12)),
+              child: const Icon(Icons.psychology, color: Colors.white, size: 24),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text("Mastery Hub",
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold)),
+                  Text(
+                      _mistakeWords.isEmpty
+                          ? "You've mastered everything! 🎉"
+                          : "${_mistakeWords.length} words need your attention",
+                      style: const TextStyle(
+                          color: Colors.white70, fontSize: 12)),
+                ],
+              ),
+            ),
+            const Icon(Icons.arrow_forward_ios,
+                color: Colors.white70, size: 16),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ─── COIN BANNER ─────────────────────────────────────────────────────────────
+
+  Widget _buildCoinBanner() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      decoration: BoxDecoration(
+        color: Colors.amber.shade50,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.amber.shade200),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.monetization_on, color: Colors.amber, size: 28),
+          const SizedBox(width: 12),
+          const Text("Total SpeechCoins: ",
+              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
+          Text("$_totalCoins",
+              style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.orange)),
+        ],
+      ),
+    );
+  }
+
+  // ─── ACHIEVEMENTS BANNER ─────────────────────────────────────────────────────
+
+  Widget _buildAchievementsBanner(BuildContext context) {
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const AchievementsScreen()),
+        );
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            )
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.amber.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: const Icon(
+                Icons.emoji_events,
+                color: Colors.amber,
+                size: 28,
+              ),
+            ),
+            const SizedBox(width: 16),
+            const Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    "View Achievements",
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
+                    ),
+                  ),
+                  SizedBox(height: 4),
+                  Text(
+                    "Check your unlocked badges and goals!",
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              Icons.arrow_forward_ios,
+              color: Colors.grey.shade400,
+              size: 16,
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

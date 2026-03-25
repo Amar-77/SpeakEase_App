@@ -7,9 +7,40 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:speakease/services/api_service.dart';
 import 'package:speakease/services/gamification_service.dart';
 import 'detailed_result_view.dart';
+
+// =============================================================================
+// 🎯 TUNING BLOCK 1 — IDLE avatar
+//    Adjust ONLY these values for the idle state character
+// =============================================================================
+const double _kIdleHeight  = 420;   // px — character height
+const double _kIdleWidth   = 420;   // px — character width
+const double _kIdleBottom  = -70;   // px — lift up from zone bottom (0 = floor)
+const double _kIdleShiftX  = 10;     // px — shift from centre (+ right, - left)
+
+// =============================================================================
+// 🎯 TUNING BLOCK 2 — RECORDING avatar
+//    Adjust ONLY these values for the listening state character
+// =============================================================================
+const double _kListenHeight = 680;
+const double _kListenWidth  = 680;
+const double _kListenBottom = -210;
+const double _kListenShiftX = 45;
+
+// =============================================================================
+// 🎯 TUNING BLOCK 3 — PROCESSING/SPEAKING avatar
+//    Adjust ONLY these values for the thinking state character
+// =============================================================================
+const double _kThinkHeight  = 410;
+const double _kThinkWidth   = 410;
+const double _kThinkBottom  = -100;
+const double _kThinkShiftX  = 130;
+// =============================================================================
+
+enum _AvatarState { idle, recording, processing }
 
 class PracticeRecordingSheet extends StatefulWidget {
   final String assignmentId;
@@ -171,7 +202,7 @@ class _PracticeRecordingSheetState extends State<PracticeRecordingSheet> {
     });
   }
 
-  // --- SUBMIT FUNCTION (UPDATED) ---
+  // --- SUBMIT FUNCTION ---
   Future<void> _submitResults() async {
     if (_analysisResult == null) return;
     setState(() => _isAnalyzing = true);
@@ -190,7 +221,7 @@ class _PracticeRecordingSheetState extends State<PracticeRecordingSheet> {
       double wpm = double.tryParse(metrics['words_per_minute'].toString()) ?? 0.0;
       String ageGroup = speaker['predicted_age_group'] ?? "Unknown";
 
-      // ⏱️ DURATION (From Server Response)
+      // ⏱️ DURATION
       double durationVal = double.tryParse(_analysisResult?['audio_duration']?.toString() ?? "30") ?? 30.0;
       int durationInSeconds = durationVal.round();
 
@@ -200,12 +231,12 @@ class _PracticeRecordingSheetState extends State<PracticeRecordingSheet> {
           .map((w) => w['text'].toString().toLowerCase())
           .toList();
 
-      // 🏆 GAMIFICATION CALL (Updated)
+      // 🏆 GAMIFICATION CALL
       await _gamificationService.processSubmission(
-        userId: widget.studentId, // 👈 PASS USER ID
+        userId: widget.studentId,
         baseCoins: widget.basePoints,
         accuracyScore: overall.round(),
-        durationSeconds: durationInSeconds, // 👈 PASS DURATION
+        durationSeconds: durationInSeconds,
       );
 
       // 💾 FIRESTORE BATCH SAVE
@@ -258,204 +289,313 @@ class _PracticeRecordingSheetState extends State<PracticeRecordingSheet> {
     }
   }
 
-  // 🔴 EVERYTHING SAME ABOVE (imports, class, functions...)
+  // =========================================================================
+  // AVATAR STATE LOGIC
+  // =========================================================================
 
-// 🔴 KEEP ALL YOUR IMPORTS & FUNCTIONS SAME ABOVE
+  _AvatarState get _currentAvatarState {
+    if (_isRecording) return _AvatarState.recording;
+    if (_isAnalyzing || _isSpeaking) return _AvatarState.processing;
+    return _AvatarState.idle;
+  }
 
-@override
-Widget build(BuildContext context) {
-  return Scaffold(
-    backgroundColor: Colors.grey.shade50,
-    appBar: AppBar(
-      title: const Text(" ",
-          style: TextStyle(color: Colors.black87, fontWeight: FontWeight.bold)),
-      centerTitle: true,
-      backgroundColor: Colors.transparent,
-      elevation: 0,
-      leading: IconButton(
-          icon: const Icon(Icons.close, color: Colors.black),
-          onPressed: () => Navigator.pop(context)
+  ({String asset, double h, double w, double bottom, double shiftX})
+  get _avatarConfig {
+    switch (_currentAvatarState) {
+      case _AvatarState.recording:
+        return (
+        asset:  'assets/images/kid_hearing.png',
+        h:      _kListenHeight,
+        w:      _kListenWidth,
+        bottom: _kListenBottom,
+        shiftX: _kListenShiftX,
+        );
+      case _AvatarState.processing:
+        return (
+        asset:  'assets/images/kid_with_mic_on_assignment.png',
+        h:      _kThinkHeight,
+        w:      _kThinkWidth,
+        bottom: _kThinkBottom,
+        shiftX: _kThinkShiftX,
+        );
+      case _AvatarState.idle:
+      default:
+        return (
+        asset:  'assets/images/kidbeforetts.png',
+        h:      _kIdleHeight,
+        w:      _kIdleWidth,
+        bottom: _kIdleBottom,
+        shiftX: _kIdleShiftX,
+        );
+    }
+  }
+
+  // =========================================================================
+  // BUILD METHOD
+  // =========================================================================
+
+  @override
+  Widget build(BuildContext context) {
+    final cfg = _avatarConfig; // Get current tuning values
+
+    return Container(
+      padding: const EdgeInsets.only(top: 24, left: 24, right: 24, bottom: 32),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
       ),
-    ),
-    body: SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 10.0),
-        child: Column(
-          children: [
-            Expanded(
-              child: _analysisResult != null
+      child: Column(
+        children: [
+          // ── 1. Top Bar (Close Button) ──
+          Align(
+            alignment: Alignment.topRight,
+            child: GestureDetector(
+              onTap: () => Navigator.pop(context),
+              child: const Icon(Icons.close, color: Colors.black87),
+            ),
+          ),
 
-                  /// ================= RESULT VIEW (UNCHANGED) =================
-                  ? SingleChildScrollView(
-                child: Column(children: [
-                  DetailedResultView(
-                    overallScore: double.tryParse(_analysisResult!['quality_scores']['overall_score'].toString()) ?? 0,
-                    fluency: double.tryParse(_analysisResult!['quality_scores']['fluency'].toString()) ?? 0,
-                    pronunciation: double.tryParse(_analysisResult!['quality_scores']['pronunciation'].toString()) ?? 0,
-                    clarity: double.tryParse(_analysisResult!['quality_scores']['clarity'].toString()) ?? 0,
-                    accuracy: double.tryParse(_analysisResult!['transcription_metrics']['accuracy_from_wer'].toString().replaceAll('%','')) ?? 0,
-                    wpm: double.tryParse(_analysisResult!['transcription_metrics']['words_per_minute'].toString()) ?? 0,
-                    ageGroup: _analysisResult!['speaker_analysis']['predicted_age_group'] ?? "?",
-                    wordAnalysis: _analysisResult!['word_analysis'] ?? [],
-                    userTranscription: _analysisResult!['full_transcription'] ?? "",
-                  ),
-                  const SizedBox(height: 20),
-                  Row(children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: _retry,
-                        style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 15)),
-                        child: const Text("TRY AGAIN"),
-                      ),
-                    ),
-                    const SizedBox(width: 15),
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: _submitResults,
-                        style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.teal,
-                            padding: const EdgeInsets.symmetric(vertical: 15)),
-                        child: const Text("SUBMIT RESULT",
-                            style: TextStyle(color: Colors.white)),
-                      ),
-                    ),
-                  ])
-                ]),
-              )
+          // ── 2. Content (Avatar + Scrollable Text) ──
+          Expanded(
+            child: _analysisResult != null
 
-                  /// ================= FIXED RECORDING UI =================
-                  : SingleChildScrollView(
-                child: Column(
-                  children: [
-
-                    /// 🧒 IMAGE
-                    Stack(
-                      children: [
-                        Center(
-                          child: Image.asset(
-                            _isRecording
-                                ? "assets/images/kidduringrecordingog.png"
-                                : _isSpeaking
-                                ? "assets/images/kidduringttsog.png"
-                                : "assets/images/kidbeforettsog.png",
-                            height: 200,
-                            fit: BoxFit.contain,
-                          ),
+            // ================= RESULT VIEW =================
+                ? SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
+              child: Column(children: [
+                DetailedResultView(
+                  overallScore: double.tryParse(_analysisResult!['quality_scores']['overall_score'].toString()) ?? 0,
+                  fluency: double.tryParse(_analysisResult!['quality_scores']['fluency'].toString()) ?? 0,
+                  pronunciation: double.tryParse(_analysisResult!['quality_scores']['pronunciation'].toString()) ?? 0,
+                  clarity: double.tryParse(_analysisResult!['quality_scores']['clarity'].toString()) ?? 0,
+                  accuracy: double.tryParse(_analysisResult!['transcription_metrics']['accuracy_from_wer'].toString().replaceAll('%','')) ?? 0,
+                  wpm: double.tryParse(_analysisResult!['transcription_metrics']['words_per_minute'].toString()) ?? 0,
+                  ageGroup: _analysisResult!['speaker_analysis']['predicted_age_group'] ?? "?",
+                  wordAnalysis: _analysisResult!['word_analysis'] ?? [],
+                  userTranscription: _analysisResult!['full_transcription'] ?? "",
+                ),
+                const SizedBox(height: 20),
+                Row(children:[
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: _retry,
+                      style: ElevatedButton.styleFrom(
+                        elevation: 0, // Flat look like the design
+                        backgroundColor: const Color(0xFF424242), // Dark grey
+                        padding: const EdgeInsets.symmetric(vertical: 18),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(24), // Pill shape
                         ),
-                     
-                      ],
-                    ),
-
-                    const SizedBox(height: 8),
-
-                    /// 📖 TEXT BOX
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFEAEAEA),
-                        borderRadius: BorderRadius.circular(20),
                       ),
-                      child: Text(
-                        widget.referenceText,
-                        textAlign: TextAlign.center,
+                      child: const Text(
+                        "RETRY",
                         style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
                           fontSize: 16,
-                          color: _isSpeaking
-                              ? Colors.red.shade700
-                              : Colors.black87,
-                          fontStyle: _isSpeaking
-                              ? FontStyle.italic
-                              : FontStyle.normal,
                         ),
                       ),
                     ),
-
-                    const SizedBox(height: 40),
-
-                    /// 🔘 BUTTONS
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-
-                        /// 🔊 LISTEN
-                        GestureDetector(
-                          onTap: (!_isRecording && !_isSpeaking)
-                              ? _playTeacherVoice
-                              : null,
-                          child: Container(
-                            width: 120,
-                            height: 50,
-                            decoration: BoxDecoration(
-                              color: _isSpeaking
-                                  ? Colors.orange
-                                  : Colors.black,
-                              borderRadius: BorderRadius.circular(30),
-                            ),
-                            child: const Icon(Icons.volume_up,
-                                color: Colors.white),
-                          ),
-                        ),
-
-                        /// 🎤 MIC
-                        GestureDetector(
-                          onTap: _isSpeaking ? null : _toggleRecording,
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 250),
-                            width: 120,
-                            height: 50,
-                            decoration: BoxDecoration(
-                              color: _isRecording
-                                  ? Colors.red
-                                  : const Color(0xFF6BC96D),
-                              borderRadius: BorderRadius.circular(30),
-                            ),
-                            child: Icon(
-                              _isRecording ? Icons.stop : Icons.mic,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-
-                    const SizedBox(height: 20),
-
-                    /// ANALYZE BUTTON
-                    if (_audioPath != null)
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton(
-                          onPressed: _isAnalyzing ? null : _analyze,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.black87,
-                            padding: const EdgeInsets.symmetric(vertical: 18),
-                          ),
-                          child: _isAnalyzing
-                              ? const CircularProgressIndicator(color: Colors.white)
-                              : const Text("ANALYZE RECORDING",
-                              style: TextStyle(color: Colors.white)),
+                  ),
+                  const SizedBox(width: 15),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: _submitResults,
+                      style: ElevatedButton.styleFrom(
+                        elevation: 0,
+                        backgroundColor: const Color(0xFF7DD3F7), // Light blue
+                        padding: const EdgeInsets.symmetric(vertical: 18),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(24),
                         ),
                       ),
+                      child: const Text(
+                        "SUBMIT",
+                        style: TextStyle(
+                          color: Colors.black87, // Dark text on light blue
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ),
+                  ),
+                ])
+              ]),
+            )
 
-                    const SizedBox(height: 20),
-                  ],
+            // ================= RECORDING UI =================
+                : Column(
+              children: [
+                // 🧑‍🏫 Adjustable Avatar (Speaky Style)
+                SizedBox(
+                  height: 280, // Base zone height for the avatar to exist in
+                  child: LayoutBuilder(
+                    builder: (ctx, constraints) {
+                      final double centreX = (constraints.maxWidth - cfg.w) / 2 + cfg.shiftX;
+                      return Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          Positioned(
+                            bottom: cfg.bottom,
+                            left: centreX,
+                            child: AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 0),
+                              transitionBuilder: (child, anim) =>
+                                  FadeTransition(opacity: anim, child: child),
+                              child: Image.asset(
+                                cfg.asset,
+                                key: ValueKey(cfg.asset),
+                                height: cfg.h,
+                                width: cfg.w,
+                                fit: BoxFit.contain,
+                              ),
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+
+                const SizedBox(height: 16),
+// 📖 Scrollable Text Area
+                Expanded(
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF2F2F2),
+                      borderRadius: BorderRadius.circular(24),
+                    ),
+                    // 1. Add LayoutBuilder to get the available height of the grey box
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        return SingleChildScrollView(
+                          physics: const BouncingScrollPhysics(),
+                          // 2. Add ConstrainedBox to force a minimum height
+                          child: ConstrainedBox(
+                            constraints: BoxConstraints(
+                              minHeight: constraints.maxHeight,
+                            ),
+                            // 3. Wrap your Text in a Center widget
+                            child: Center(
+                              child: Text(
+                                widget.referenceText,
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: 20,
+                                  height: 1.5,
+                                  color: _isSpeaking ? Colors.red.shade700 : Colors.black87,
+                                  fontStyle: _isSpeaking ? FontStyle.italic : FontStyle.normal,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // ── 3. Bottom Buttons (Fixed at bottom) ──
+          if (_analysisResult == null) ...[
+            const SizedBox(height: 24),
+
+            // Analyze Button
+            if (_audioPath != null && !_isRecording) ...[
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: _isAnalyzing ? null : _analyze,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.black87,
+                    padding: const EdgeInsets.symmetric(vertical: 18),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                  ),
+                  child: _isAnalyzing
+                      ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                      : const Text("ANALYZE RECORDING",
+                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                 ),
               ),
+              const SizedBox(height: 16),
+            ],
+
+            // Speaker & Mic Row
+            Row(
+              children: [
+                // 🔊 SPEAKER BUTTON
+                Expanded(
+                  child: GestureDetector(
+                    onTap: (!_isRecording && !_isSpeaking) ? _playTeacherVoice : null,
+                    child: Container(
+                      height: 64,
+                      decoration: BoxDecoration(
+                        color: _isSpeaking ? Colors.orange : const Color(0xFF4A4A4A),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Center(
+                        child: _isLoadingTTS
+                            ? const SizedBox(
+                            height: 24,
+                            width: 24,
+                            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                            : SvgPicture.asset(
+                          'assets/icons/speaker_icon.svg',
+                          width: 28,
+                          height: 28,
+                          colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+
+                const SizedBox(width: 16),
+
+                // 🎤 MIC BUTTON
+                Expanded(
+                  child: GestureDetector(
+                    onTap: _isSpeaking ? null : _toggleRecording,
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 300),
+                      height: 64,
+                      decoration: BoxDecoration(
+                        color: _isRecording ? const Color(0xFFFF4B4B) : const Color(0xFF6BC96C),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Center(
+                        child: _isRecording
+                            ? Container(
+                          width: 20,
+                          height: 20,
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        )
+                            : SvgPicture.asset(
+                          'assets/icons/mic.svg',
+                          width: 28,
+                          height: 28,
+                          colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ],
-        ),
+        ],
       ),
-    ),
-  );
-}
-
-  Widget _buildNeumorphicButton({required IconData icon, required String label, required Color color, required bool isActive, required VoidCallback onTap}) {
-    return Column(children: [
-      GestureDetector(onTap: isActive ? onTap : null, child: Opacity(opacity: isActive ? 1.0 : 0.4, child: Container(padding: const EdgeInsets.all(18), decoration: BoxDecoration(color: Colors.white, shape: BoxShape.circle, boxShadow: [BoxShadow(color: Colors.grey.shade200, blurRadius: 10, offset: const Offset(0, 5))]), child: Icon(icon, color: color, size: 28)))),
-      const SizedBox(height: 8),
-      Text(label, style: TextStyle(color: Colors.grey.shade600, fontSize: 12))
-    ]);
+    );
   }
 }

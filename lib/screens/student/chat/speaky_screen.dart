@@ -8,9 +8,48 @@ import 'package:record/record.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:uuid/uuid.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
-// Import the Report Card Screen (Make sure this file exists!)
 import 'report_card_screen.dart';
+
+// =============================================================================
+// 🎯 TUNING BLOCK 1 — IDLE avatar (kid_with_mic_on_assignment.png)
+//    Adjust ONLY these values for the idle state character
+// =============================================================================
+const double _kIdleHeight  = 520;   // px — character height
+const double _kIdleWidth   = 520;   // px — character width
+const double _kIdleBottom  = -90;     // px — lift up from zone bottom (0 = floor)
+const double _kIdleShiftX  = 140;     // px — shift from centre (+ right, - left)
+
+// =============================================================================
+// 🎯 TUNING BLOCK 2 — RECORDING avatar (kid_hearing.png)
+//    Adjust ONLY these values for the listening state character
+// =============================================================================
+const double _kListenHeight = 950;
+const double _kListenWidth  = 950;
+const double _kListenBottom = -290;
+const double _kListenShiftX = 50;
+
+// =============================================================================
+// 🎯 TUNING BLOCK 3 — PROCESSING avatar (thinking_speaky.png)
+//    Adjust ONLY these values for the thinking state character
+// =============================================================================
+const double _kThinkHeight  = 1020;
+const double _kThinkWidth   = 1020;
+const double _kThinkBottom  = -340;
+const double _kThinkShiftX  = 260;
+
+// =============================================================================
+// 🎯 BUBBLE TUNING — resize the speech bubble PNG
+// =============================================================================
+const double _kBubbleWidth   = double.infinity; // or a fixed px like 340
+const double _kBubbleHeight  = 250;             // px — increase for taller bubble
+// Text padding inside the bubble (tweak if text overflows or sits wrong)
+const EdgeInsets _kBubbleTextPadding =
+EdgeInsets.fromLTRB(28, 22, 48, 50); // left, top, right, bottom
+// =============================================================================
+
+enum _SpeakyState { idle, recording, processing }
 
 class SpeakyChatScreen extends StatefulWidget {
   const SpeakyChatScreen({Key? key}) : super(key: key);
@@ -20,31 +59,25 @@ class SpeakyChatScreen extends StatefulWidget {
 }
 
 class _SpeakyChatScreenState extends State<SpeakyChatScreen> {
-  // --- CONFIGURATION ---
-  // ⚠️ REPLACE WITH YOUR ACTUAL SERVER IP
-  String? baseUrl = dotenv.env['API_URL'];
+  final String? baseUrl = dotenv.env['API_URL'];
 
-  // --- STATE ---
   late String sessionId;
   final AudioRecorder _recorder = AudioRecorder();
-  final AudioPlayer _player = AudioPlayer();
+  final AudioPlayer   _player   = AudioPlayer();
 
   List<Map<String, String>> chatHistory = [];
-  bool isRecording = false;
-  bool isProcessing = false;
+  _SpeakyState _speakyState = _SpeakyState.idle;
 
-  // COUNTER LOGIC
-  int turnCount = 0;
-  final int maxTurns = 5;
+  int       turnCount = 0;
+  final int maxTurns  = 5;
+
+  String _bubbleText   = "Hi! I'm Speaky. What do you want to talk about today?";
+  bool   _bubbleIsUser = false; // false = AI black bold / true = user blue-purple
 
   @override
   void initState() {
     super.initState();
     sessionId = const Uuid().v4();
-    chatHistory.add({
-      "role": "ai",
-      "content": "Hi! I'm Speaky. What do you want to talk about today?"
-    });
   }
 
   @override
@@ -54,236 +87,435 @@ class _SpeakyChatScreenState extends State<SpeakyChatScreen> {
     super.dispose();
   }
 
-  // --- 1. RECORDING ---
-  Future<void> startRecording() async {
-    var status = await Permission.microphone.request();
+  // ── 1. RECORDING ──────────────────────────────────────────────────────────
+  Future<void> _startRecording() async {
+    final status = await Permission.microphone.request();
     if (status != PermissionStatus.granted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Microphone permission required!")));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Microphone permission required!")));
+      }
       return;
     }
-
     final dir = await getTemporaryDirectory();
-    String path = '${dir.path}/temp_voice.wav';
-
-    await _recorder.start(const RecordConfig(), path: path);
-    setState(() => isRecording = true);
+    await _recorder.start(const RecordConfig(),
+        path: '${dir.path}/temp_voice.wav');
+    setState(() => _speakyState = _SpeakyState.recording);
   }
 
-  Future<void> stopRecording() async {
+  Future<void> _stopRecording() async {
     final path = await _recorder.stop();
-    setState(() => isRecording = false);
-
     if (path != null) {
-      await sendAudioTurn(path);
+      await _sendAudioTurn(path);
+    } else {
+      setState(() => _speakyState = _SpeakyState.idle);
     }
   }
 
-  // --- 2. SEND TO SERVER & HANDLE TURN LIMIT ---
-  Future<void> sendAudioTurn(String audioPath) async {
-    setState(() => isProcessing = true);
+  // ── 2. SEND TO SERVER ─────────────────────────────────────────────────────
+  Future<void> _sendAudioTurn(String audioPath) async {
+    setState(() => _speakyState = _SpeakyState.processing);
 
     try {
-      var uri = Uri.parse('$baseUrl/chat-batch/');
-      var request = http.MultipartRequest('POST', uri);
-
+      final uri     = Uri.parse('$baseUrl/chat-batch/');
+      final request = http.MultipartRequest('POST', uri);
       request.files.add(await http.MultipartFile.fromPath('file', audioPath));
-      request.fields['session_id'] = sessionId;
+      request.fields['session_id']   = sessionId;
       request.fields['chat_history'] = jsonEncode(chatHistory);
 
-      var streamedResponse = await request.send();
-      var response = await http.Response.fromStream(streamedResponse);
+      final response =
+      await http.Response.fromStream(await request.send());
 
       if (response.statusCode == 200) {
-        // A. Update Chat UI
-        String userText = response.headers['x-user-text'] ?? "...";
-        String aiText = response.headers['x-ai-text'] ?? "...";
+        final userText = response.headers['x-user-text'] ?? '...';
+        final aiText   = response.headers['x-ai-text']   ?? '...';
 
         setState(() {
-          chatHistory.add({"role": "user", "content": userText});
-          chatHistory.add({"role": "ai", "content": aiText});
-          turnCount++; // INCREMENT COUNTER
-          isProcessing = false;
+          _bubbleText   = userText;
+          _bubbleIsUser = true;
         });
 
-        // B. Play Audio Response
-        final dir = await getTemporaryDirectory();
+        chatHistory
+          ..add({"role": "user", "content": userText})
+          ..add({"role": "ai",   "content": aiText});
+        turnCount++;
+
+        final dir  = await getTemporaryDirectory();
         final file = File('${dir.path}/response.mp3');
         await file.writeAsBytes(response.bodyBytes);
         await _player.play(DeviceFileSource(file.path));
 
-        // C. CHECK LIMIT (If 5 turns reached -> End Session)
-        if (turnCount >= maxTurns) {
-          // Wait for audio to finish (approximate) or just trigger
-          await Future.delayed(const Duration(seconds: 4));
-          if (mounted) {
-            _finishSessionAndShowReport();
-          }
+        if (mounted) {
+          setState(() {
+            _bubbleText   = aiText;
+            _bubbleIsUser = false;
+            _speakyState  = _SpeakyState.idle;
+          });
         }
 
+        if (turnCount >= maxTurns) {
+          await Future.delayed(const Duration(seconds: 4));
+          if (mounted) _finishSessionAndShowReport();
+        }
       } else {
-        print("Server Error: ${response.statusCode}");
-        setState(() => isProcessing = false);
+        if (mounted) setState(() => _speakyState = _SpeakyState.idle);
       }
     } catch (e) {
-      print("Network Error: $e");
-      setState(() => isProcessing = false);
+      debugPrint("Network Error: $e");
+      if (mounted) setState(() => _speakyState = _SpeakyState.idle);
     }
   }
 
-  // --- 3. END SESSION & NAVIGATE TO REPORT ---
+  // ── 3. END SESSION ────────────────────────────────────────────────────────
   Future<void> _finishSessionAndShowReport() async {
-    // Show a loading dialog so user knows report is generating
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => const Center(child: CircularProgressIndicator()),
+      builder: (_) => const Center(child: CircularProgressIndicator()),
     );
-
     try {
-      final uri = Uri.parse('$baseUrl/end-session-score/$sessionId');
-      final response = await http.get(uri);
-
-      // Close loading dialog
+      final response =
+      await http.get(Uri.parse('$baseUrl/end-session-score/$sessionId'));
       if (mounted) Navigator.pop(context);
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-
-        // Navigate to Report Screen
         if (mounted) {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder: (context) => ReportCardScreen(data: data),
-            ),
-          );
+          Navigator.pushReplacement(context,
+              MaterialPageRoute(builder: (_) => ReportCardScreen(data: data)));
         }
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Failed to generate report.")));
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text("Failed to generate report.")));
+        }
       }
     } catch (e) {
-      if (mounted) Navigator.pop(context); // Close dialog on error
-      print("Report Error: $e");
+      if (mounted) Navigator.pop(context);
+      debugPrint("Report Error: $e");
     }
   }
 
-  // --- UI BUILD ---
+  // ── helpers ───────────────────────────────────────────────────────────────
+  String get _statusLabel {
+    switch (_speakyState) {
+      case _SpeakyState.recording:  return 'Listening......';
+      case _SpeakyState.processing: return 'Thinking......';
+      case _SpeakyState.idle:
+      default:                      return 'Respond after listening';
+    }
+  }
+
+  // Returns the per-state avatar config as a record
+  ({String asset, double h, double w, double bottom, double shiftX})
+  get _avatarConfig {
+    switch (_speakyState) {
+      case _SpeakyState.recording:
+        return (
+        asset:  'assets/images/kid_hearing.png',
+        h:      _kListenHeight,
+        w:      _kListenWidth,
+        bottom: _kListenBottom,
+        shiftX: _kListenShiftX,
+        );
+      case _SpeakyState.processing:
+        return (
+        asset:  'assets/images/thinking_speaky.png',
+        h:      _kThinkHeight,
+        w:      _kThinkWidth,
+        bottom: _kThinkBottom,
+        shiftX: _kThinkShiftX,
+        );
+      case _SpeakyState.idle:
+      default:
+        return (
+        asset:  'assets/images/kid_with_mic_on_assignment.png',
+        h:      _kIdleHeight,
+        w:      _kIdleWidth,
+        bottom: _kIdleBottom,
+        shiftX: _kIdleShiftX,
+        );
+    }
+  }
+
+  // ── BUILD ─────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
+    final cfg = _avatarConfig;
+
     return Scaffold(
+      backgroundColor: Colors.white,
       appBar: AppBar(
-        title: Text("Speaky ($turnCount/$maxTurns)"), // Show progress in title
-        backgroundColor: Colors.white,
-        elevation: 0,
-        titleTextStyle: const TextStyle(color: Colors.black, fontSize: 20, fontWeight: FontWeight.bold),
-        iconTheme: const IconThemeData(color: Colors.black),
+        backgroundColor:  Colors.white,
+        surfaceTintColor: Colors.white,
+        elevation:        0,
+        leading: IconButton(
+          icon: const Icon(Icons.chevron_left, color: Colors.black, size: 28),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: const Text(
+          'Speaky',
+          style: TextStyle(
+              color: Colors.black,
+              fontSize: 22,
+              fontWeight: FontWeight.bold),
+        ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.flag_outlined, color: Colors.red),
-            onPressed: () => _finishSessionAndShowReport(), // Manual End
-            tooltip: "End Session Early",
+          Padding(
+            padding: const EdgeInsets.only(right: 16),
+            child: GestureDetector(
+              onTap: _finishSessionAndShowReport,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  '$turnCount/$maxTurns',
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                      color: Colors.black54),
+                ),
+              ),
+            ),
           ),
         ],
       ),
+
       body: Column(
         children: [
-          // Chat Area
+          // ── UPPER: bubble + avatar + label ──────────────────────────────
           Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: chatHistory.length,
-              itemBuilder: (context, index) {
-                final msg = chatHistory[index];
-                final isUser = msg['role'] == 'user';
-                return Align(
-                  alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
-                  child: Container(
-                    margin: const EdgeInsets.symmetric(vertical: 6),
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
-                    decoration: BoxDecoration(
-                      color: isUser ? Colors.blue[600] : Colors.grey[200],
-                      borderRadius: BorderRadius.only(
-                        topLeft: const Radius.circular(20),
-                        topRight: const Radius.circular(20),
-                        bottomLeft: isUser ? const Radius.circular(20) : Radius.zero,
-                        bottomRight: isUser ? Radius.zero : const Radius.circular(20),
-                      ),
-                    ),
-                    child: Text(
-                      msg['content']!,
-                      style: TextStyle(
-                        color: isUser ? Colors.white : Colors.black87,
-                        fontSize: 16,
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-
-          // Loading Indicator
-          if (isProcessing)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 20),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: const [
-                  SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
-                  SizedBox(width: 10),
-                  Text("Speaky is thinking...", style: TextStyle(color: Colors.grey)),
-                ],
-              ),
-            ),
-
-          // Bottom Recording Area
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, -5))],
-            ),
             child: Column(
               children: [
-                GestureDetector(
-                  // Long Press to Record
-                  onLongPressStart: (_) => startRecording(),
-                  onLongPressEnd: (_) => stopRecording(),
-                  // Tap to Toggle (Optional)
-                  onTap: () {
-                    if (!isRecording) startRecording(); else stopRecording();
-                  },
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    height: 80,
-                    width: 80,
-                    decoration: BoxDecoration(
-                        color: isRecording ? Colors.redAccent : Colors.blueAccent,
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          if (isRecording)
-                            BoxShadow(color: Colors.redAccent.withOpacity(0.5), blurRadius: 20, spreadRadius: 5)
-                        ]
-                    ),
-                    child: Icon(
-                      isRecording ? Icons.mic_off : Icons.mic,
-                      color: Colors.white,
-                      size: 35,
+                const SizedBox(height: 8),
+
+                // ── SPEECH BUBBLE PNG with text stacked on top ─────────────
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: _SpeechBubble(
+                    text:   _bubbleText,
+                    isUser: _bubbleIsUser,
+                  ),
+                ),
+
+                // ── AVATAR — each state has its OWN position + size ────────
+                Expanded(
+                  child: LayoutBuilder(
+                    builder: (ctx, constraints) {
+                      final double centreX =
+                          (constraints.maxWidth - cfg.w) / 2 + cfg.shiftX;
+                      return Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          Positioned(
+                            bottom: cfg.bottom,
+                            left:   centreX,
+                            child: AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 0),
+                              transitionBuilder: (child, anim) =>
+                                  FadeTransition(opacity: anim, child: child),
+                              child: Image.asset(
+                                cfg.asset,
+                                key:    ValueKey(cfg.asset),
+                                height: cfg.h,
+                                width:  cfg.w,
+                                fit:    BoxFit.contain,
+                              ),
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+
+                // ── STATUS LABEL ───────────────────────────────────────────
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 18),
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 250),
+                    child: Text(
+                      _statusLabel,
+                      key: ValueKey(_statusLabel),
+                      style: TextStyle(
+                        fontSize:   14,
+                        color:      Colors.grey.shade500,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                   ),
                 ),
-                const SizedBox(height: 10),
-                Text(
-                  isRecording ? "Listening..." : "Hold to Speak",
-                  style: TextStyle(color: Colors.grey[600], fontWeight: FontWeight.w600),
-                )
               ],
             ),
-          )
+          ),
+
+          // ── MIC BUTTON ──────────────────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.fromLTRB(40, 0, 40, 36),
+            child: _MicButton(
+              speakyState:    _speakyState,
+              onIdleTap:      _startRecording,
+              onRecordingTap: _stopRecording,
+            ),
+          ),
         ],
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// SPEECH BUBBLE — uses YOUR exported PNG as the background
+// Text is stacked on top using padding to sit inside the blob area
+// =============================================================================
+class _SpeechBubble extends StatelessWidget {
+  final String text;
+  final bool   isUser;
+
+  const _SpeechBubble({required this.text, required this.isUser});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width:  _kBubbleWidth == double.infinity
+          ? double.infinity
+          : _kBubbleWidth,
+      height: _kBubbleHeight,
+      child: Stack(
+        children: [
+          // ── 1. YOUR custom bubble PNG fills the box ──────────────────────
+          // The PNG has a black background — use colorBlendMode to knock it out,
+          // OR (simpler) make the PNG transparent-bg in your editor and re-export.
+          // For now we use the PNG as-is and clip a matching shape behind text.
+          Positioned.fill(
+            child: Image.asset(
+              'assets/images/text_box_custom.png',
+              fit: BoxFit.fill,
+            ),
+          ),
+
+          // ── 2. Text sits on top, padded to stay inside the grey blob ─────
+          // _kBubbleTextPadding controls exactly where text sits in the blob.
+          // Increase bottom padding to avoid the tail area.
+          Positioned.fill(
+            child: Padding(
+              padding: _kBubbleTextPadding,
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 280),
+                child: Text(
+                  text,
+                  key:       ValueKey(text),
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize:   17,
+                    fontWeight: isUser ? FontWeight.w500 : FontWeight.bold,
+                    color:      isUser
+                        ? const Color(0xFF6C7FD8)
+                        : Colors.black,
+                    height: 1.4,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MicButton extends StatelessWidget {
+  final _SpeakyState speakyState;
+  final VoidCallback onIdleTap;
+  final VoidCallback onRecordingTap;
+
+  const _MicButton({
+    required this.speakyState,
+    required this.onIdleTap,
+    required this.onRecordingTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    late final Color bgColor;
+    late final Widget icon;
+    late final VoidCallback? onTap;
+
+    switch (speakyState) {
+      case _SpeakyState.recording:
+        bgColor = const Color(0xFFEF4444);
+
+        icon = Container(
+          width: 18,
+          height: 18,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(4),
+          ),
+        );
+
+        onTap = onRecordingTap;
+        break;
+
+      case _SpeakyState.processing:
+        bgColor = const Color(0xFF9E9E9E);
+
+        icon = SvgPicture.asset(
+          'assets/icons/mic.svg',
+          width: 24,
+          height: 24,
+          colorFilter: const ColorFilter.mode(
+            Colors.white,
+            BlendMode.srcIn,
+          ),
+        );
+
+        onTap = null;
+        break;
+
+      case _SpeakyState.idle:
+      default:
+        bgColor = const Color(0xFF66BB6A);
+
+        icon = SvgPicture.asset(
+          'assets/icons/mic.svg',
+          width: 24,
+          height: 24,
+          colorFilter: const ColorFilter.mode(
+            Colors.white,
+            BlendMode.srcIn,
+          ),
+        );
+
+        onTap = onIdleTap;
+    }
+
+    return Center(
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeInOut,
+          width: 140,
+          height: 60,
+          decoration: BoxDecoration(
+            color: bgColor,
+            borderRadius: BorderRadius.circular(30),
+            boxShadow: onTap != null
+                ? [
+              BoxShadow(
+                color: bgColor.withOpacity(0.35),
+                blurRadius: 18,
+                offset: const Offset(0, 8),
+              ),
+            ]
+                : [],
+          ),
+          child: Center(child: icon),
+        ),
       ),
     );
   }

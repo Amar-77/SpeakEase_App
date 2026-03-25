@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:math';
 
 class ReportCardScreen extends StatelessWidget {
   final Map<String, dynamic> data;
@@ -15,7 +16,6 @@ class ReportCardScreen extends StatelessWidget {
     final int turns = data['turns_analyzed'] ?? 0;
 
     // 2. SAFETY CLAMP (Ensure no score exceeds 10.0)
-    // Even though server fixes it, we double-check here to prevent UI crashes.
     if (serverOverall > 10.0) serverOverall = 10.0;
     if (fluency > 10.0) fluency = 10.0;
     if (pronunciation > 10.0) pronunciation = 10.0;
@@ -23,101 +23,165 @@ class ReportCardScreen extends StatelessWidget {
 
     // 3. PROGRESS VALUE (0.0 to 1.0 for the Circle)
     double progressValue = serverOverall / 10.0;
+    int percentageScore = (serverOverall * 10).round();
 
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        title: const Text("Session Report"),
         backgroundColor: Colors.white,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.close, color: Colors.black),
+          icon: const Icon(Icons.arrow_back_ios_new, color: Colors.black87, size: 20),
           onPressed: () => Navigator.pop(context),
         ),
-        titleTextStyle: const TextStyle(color: Colors.black, fontSize: 20, fontWeight: FontWeight.bold),
+        title: const Text(
+          "Session Report",
+          style: TextStyle(color: Colors.black87, fontSize: 20, fontWeight: FontWeight.w600),
+        ),
+        centerTitle: false,
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            const SizedBox(height: 10),
+            const SizedBox(height: 20),
 
-            // 1. THE BIG SCORE CIRCLE (Weighted Overall)
-            Stack(
-              alignment: Alignment.center,
-              children: [
-                SizedBox(
-                  height: 180, width: 180,
-                  child: CircularProgressIndicator(
-                    value: progressValue, // 0.0 to 1.0
-                    strokeWidth: 15,
-                    backgroundColor: Colors.grey[200],
-                    valueColor: AlwaysStoppedAnimation<Color>(
-                      serverOverall > 7 ? Colors.green : (serverOverall > 4 ? Colors.orange : Colors.red),
+            // 1. THE BIG SCORE CIRCLE (Custom Thick Ring)
+            Center(
+              child: Column(
+                children: [
+                  SizedBox(
+                    width: 140,
+                    height: 140,
+                    child: Stack(
+                      alignment: Alignment.center,
+                      clipBehavior: Clip.none,
+                      children: [
+                        // Donut Shadow
+                        Container(
+                          width: 120,
+                          height: 120,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.12),
+                                blurRadius: 15,
+                                offset: const Offset(0, 8),
+                              ),
+                            ],
+                          ),
+                        ),
+                        // Mask center
+                        Container(
+                          width: 90,
+                          height: 90,
+                          decoration: const BoxDecoration(
+                            color: Colors.white,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        // Custom Painted Thick Ring
+                        SizedBox(
+                          width: 140,
+                          height: 140,
+                          child: CustomPaint(
+                            painter: _ThickProgressPainter(
+                              progress: progressValue,
+                              trackColor: const Color(0xFFE2E2E2), // Light grey
+                              progressColor: const Color(0xFF5AB664), // Green
+                              strokeWidth: 26,
+                            ),
+                          ),
+                        ),
+                        // Text inside ring
+                        RichText(
+                          text: TextSpan(
+                            children: [
+                              TextSpan(
+                                text: "$percentageScore",
+                                style: const TextStyle(
+                                  fontSize: 34,
+                                  fontWeight: FontWeight.w900,
+                                  color: Colors.black87,
+                                ),
+                              ),
+                              const TextSpan(
+                                text: "%",
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.black54,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                ),
-                Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      "${(serverOverall * 10).toInt()}%", // Show as Percentage
-                      style: const TextStyle(fontSize: 42, fontWeight: FontWeight.bold),
-                    ),
-                    const Text("Overall Score", style: TextStyle(color: Colors.grey, fontSize: 14)),
-                  ],
-                )
-              ],
-            ),
-            const SizedBox(height: 30),
-
-            // 2. THE 3 METRICS (Fluency, Pronunciation, Clarity)
-            Row(
-              children: [
-                _buildScoreCard("Fluency", fluency, Colors.blue),
-                const SizedBox(width: 8),
-                _buildScoreCard("Pronun.", pronunciation, Colors.purple),
-                const SizedBox(width: 8),
-                _buildScoreCard("Clarity", accuracy, Colors.teal),
-              ],
+                  const SizedBox(height: 24),
+                  const Text("Overall Score",
+                      style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: Colors.black87)),
+                ],
+              ),
             ),
 
             const SizedBox(height: 30),
 
-            // 3. SUMMARY TEXT
+            // 2. METRICS GRID (Pastel Squares)
+            LayoutBuilder(
+                builder: (context, constraints) {
+                  final double gap = 12.0;
+                  final double size = (constraints.maxWidth - (gap * 2)) / 3;
+
+                  return Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      _buildPastelCard("Fluency", fluency, Icons.waves, const Color(0xFFC7F0FF), size),
+                      _buildPastelCard("Pronunciation", pronunciation, Icons.record_voice_over, const Color(0xFFE0D4FF), size),
+                      _buildPastelCard("Clarity", accuracy, Icons.hearing, const Color(0xFFFFF4B8), size),
+                    ],
+                  );
+                }
+            ),
+
+            const SizedBox(height: 30),
+
+            // 3. SUMMARY TEXT BOX
             Container(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
               decoration: BoxDecoration(
-                color: Colors.grey[100],
-                borderRadius: BorderRadius.circular(12),
+                color: const Color(0xFFF2F2F2), // Light grey pill
+                borderRadius: BorderRadius.circular(16),
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.analytics_outlined, color: Colors.grey),
-                  const SizedBox(width: 10),
+                  const Icon(Icons.assignment_outlined, color: Colors.black54, size: 26),
+                  const SizedBox(width: 16),
                   Expanded(
                     child: Text(
-                      "Great job! You practiced $turns sentences. Your clarity score is ${accuracy.toStringAsFixed(1)}/10.",
-                      style: const TextStyle(fontSize: 15, color: Colors.black87),
+                      "Great job! You practiced $turns sentences.\nYour clarity score is ${accuracy.toStringAsFixed(1)}/10.",
+                      style: const TextStyle(fontSize: 13, color: Colors.black87, fontWeight: FontWeight.w500, height: 1.4),
                     ),
                   ),
                 ],
               ),
             ),
 
-            const SizedBox(height: 40),
+            const SizedBox(height: 30),
 
-            // 4. BACK BUTTON
+            // 4. BACK BUTTON (Purple Pill)
             SizedBox(
               width: double.infinity,
-              height: 55,
+              height: 60,
               child: ElevatedButton(
                 onPressed: () => Navigator.pop(context),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.deepPurple,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                  elevation: 2,
+                  elevation: 0,
+                  backgroundColor: const Color(0xFF7B52C3), // Purple matching reference
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
                 ),
                 child: const Text(
                   "Back to Dashboard",
@@ -131,33 +195,96 @@ class ReportCardScreen extends StatelessWidget {
     );
   }
 
-  // Helper Widget for the small cards
-  Widget _buildScoreCard(String title, double score, Color color) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 5),
-        decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(15),
-          border: Border.all(color: color.withOpacity(0.3), width: 1.5),
-        ),
-        child: Column(
-          children: [
-            Text(
-              title,
-              style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: color),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+  // --- HELPER WIDGETS ---
+
+  Widget _buildPastelCard(String label, double score, IconData icon, Color bgColor, double size) {
+    return Container(
+      width: size,
+      height: size + 10, // Slightly taller to match reference proportions
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, color: Colors.black87, size: 32),
+          const SizedBox(height: 8),
+          RichText(
+            text: TextSpan(
+              children: [
+                TextSpan(
+                  text: score.toStringAsFixed(1),
+                  style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 22, color: Colors.black87),
+                ),
+                const TextSpan(
+                  text: "/10",
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.black54),
+                ),
+              ],
             ),
-            const SizedBox(height: 8),
-            Text(
-              score.toStringAsFixed(1),
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: color),
-            ),
-            Text("/10", style: TextStyle(fontSize: 10, color: color.withOpacity(0.7))),
-          ],
-        ),
+          ),
+          const SizedBox(height: 4),
+          Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.black54), textAlign: TextAlign.center),
+        ],
       ),
     );
+  }
+}
+
+// =========================================================================
+// 🎨 CUSTOM PAINTER FOR THICK PROGRESS RING
+// =========================================================================
+class _ThickProgressPainter extends CustomPainter {
+  final double progress; // 0.0 to 1.0
+  final Color trackColor;
+  final Color progressColor;
+  final double strokeWidth;
+
+  _ThickProgressPainter({
+    required this.progress,
+    required this.trackColor,
+    required this.progressColor,
+    required this.strokeWidth,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = (size.width / 2) - (strokeWidth / 2);
+
+    // 1. Draw Background Track
+    final trackPaint = Paint()
+      ..color = trackColor
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth;
+
+    canvas.drawCircle(center, radius, trackPaint);
+
+    // 2. Draw Progress Arc
+    final progressPaint = Paint()
+      ..color = progressColor
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..strokeCap = StrokeCap.round;
+
+    final startAngle = -pi / 2;
+    final sweepAngle = 2 * pi * progress;
+
+    canvas.drawArc(
+      Rect.fromCircle(center: center, radius: radius),
+      startAngle,
+      sweepAngle,
+      false,
+      progressPaint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _ThickProgressPainter oldDelegate) {
+    return oldDelegate.progress != progress ||
+        oldDelegate.trackColor != trackColor ||
+        oldDelegate.progressColor != progressColor ||
+        oldDelegate.strokeWidth != strokeWidth;
   }
 }
