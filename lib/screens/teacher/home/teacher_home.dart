@@ -191,7 +191,7 @@ class TeacherHome extends StatelessWidget {
                             child: Container(
                               height: 304, // SAME AS STUDENT
                               decoration: BoxDecoration(
-                                color: const Color(0xFFBEE8B5),
+                                color: const Color.fromRGBO(190, 232, 181, 1),
                                 borderRadius: BorderRadius.circular(28),
                               ),
                               child: Stack(
@@ -201,7 +201,7 @@ class TeacherHome extends StatelessWidget {
                                       offset: const Offset(0, -40),
                                       child: Image.asset(
                                         'assets/images/createassignment.png',
-                                        height: 200,
+                                        height: 250,
                                       ),
                                     ),
                                   ),
@@ -249,7 +249,7 @@ class TeacherHome extends StatelessWidget {
                                     clipBehavior: Clip.none,
                                     children: [
                                       Positioned(
-                                        top: -60,
+                                        top: -50,
                                         left: 0,
                                         right: 0,
                                         child: Center(
@@ -266,7 +266,7 @@ class TeacherHome extends StatelessWidget {
                                         child: Text(
                                           'View Sent\nAssignments',
                                           style: TextStyle(
-                                            fontSize: 16,
+                                            fontSize: 18,
                                             fontWeight: FontWeight.w600,
                                           ),
                                         ),
@@ -299,8 +299,8 @@ class TeacherHome extends StatelessWidget {
                                     clipBehavior: Clip.none,
                                     children: [
                                       Positioned(
-                                        bottom: -10,
-                                        right: -5,
+                                        bottom: -15,
+                                        right: 0,
                                         child: Image.asset(
                                           'assets/images/mystudents.png',
                                           height: 110,
@@ -312,7 +312,7 @@ class TeacherHome extends StatelessWidget {
                                         child: Text(
                                           'My Students',
                                           style: TextStyle(
-                                            fontSize: 15,
+                                            fontSize: 18,
                                             fontWeight: FontWeight.w600,
                                           ),
                                         ),
