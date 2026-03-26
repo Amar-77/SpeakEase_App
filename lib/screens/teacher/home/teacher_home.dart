@@ -1,106 +1,330 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:intl/intl.dart';
+import 'package:speakease/screens/student/home/widgets/teacher_app_bar.dart';
+
 import '../assignments/create_assignment_screen.dart';
 import '../assignments/teacher_history_screen.dart';
 import '../students/student_list_screen.dart';
-import 'package:speakease/screens/auth/auth_gate.dart'; // ✅ ADDED: Import AuthGate
 
 class TeacherHome extends StatelessWidget {
   const TeacherHome({super.key});
+
+  String _getCurrentDate() {
+    DateTime now = DateTime.now();
+    String day = DateFormat('d').format(now);
+
+    String suffix = 'th';
+    if (day.endsWith('1') && day != '11') suffix = 'st';
+    else if (day.endsWith('2') && day != '12') suffix = 'nd';
+    else if (day.endsWith('3') && day != '13') suffix = 'rd';
+
+    return "$day$suffix ${DateFormat('MMMM y').format(now)}";
+  }
 
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser!;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text("Teacher Dashboard"),
-        backgroundColor: Colors.teal,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () async {
-              // ✅ UPDATED: Safe Logout Logic
-              await FirebaseAuth.instance.signOut();
-
-              if (context.mounted) {
-                Navigator.of(context).pushAndRemoveUntil(
-                  MaterialPageRoute(builder: (context) => const AuthGate()),
-                      (route) => false,
-                );
-              }
-            },
-          )
-        ],
-      ),
+      backgroundColor: Colors.white,
       body: StreamBuilder<DocumentSnapshot>(
-        stream: FirebaseFirestore.instance.collection('users').doc(user.uid).snapshots(),
+        stream: FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .snapshots(),
         builder: (context, snapshot) {
-          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+          if (!snapshot.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
 
           var data = snapshot.data!.data() as Map<String, dynamic>;
 
-          return Center(
+          String name = data['name'] ?? "Teacher";
+          String classId = data['class_id'] ?? "N/A";
+
+          final size = MediaQuery.of(context).size;
+
+          return SafeArea(
             child: SingleChildScrollView(
+              padding: const EdgeInsets.only(bottom: 120),
               child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(Icons.school, size: 100, color: Colors.teal),
-                  const SizedBox(height: 20),
-                  Text("Welcome, ${data['name']}!", style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-                  Text("Class ID: ${data['class_id'] ?? 'N/A'}", style: const TextStyle(color: Colors.grey, fontSize: 16)),
-                  const SizedBox(height: 40),
 
-                  // 1. Create Button
-                  ElevatedButton.icon(
-                    onPressed: () {
-                      Navigator.push(context, MaterialPageRoute(builder: (_) => const CreateAssignmentScreen()));
-                    },
-                    icon: const Icon(Icons.add_circle, size: 28),
-                    label: const Text("Create New Assignment", style: TextStyle(fontSize: 18)),
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
-                      backgroundColor: Colors.teal,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                  const TeacherAppBar(),
+
+                  const SizedBox(height: 10),
+
+                  /// 🔥 HERO (NOW EXACTLY MATCHES STUDENT)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: Container(
+                      width: double.infinity,
+                      height: size.height * 0.38,
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFFFFCFEA), Color(0xFF82A5E8)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(32),
+                      ),
+                      child: Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+
+                          /// TEXT SIDE (SAME AS STUDENT)
+                          Padding(
+                            padding: const EdgeInsets.all(24),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+
+                                const Text(
+                                  'WELCOME,',
+                                  style: TextStyle(
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.w300,
+                                    color: Color(0xFF171717),
+                                    letterSpacing: 1.5,
+                                  ),
+                                ),
+
+                                const SizedBox(height: 2),
+
+                                Text(
+                                  '${name.toUpperCase()}!',
+                                  style: const TextStyle(
+                                    fontSize: 35,
+                                    fontWeight: FontWeight.w500,
+                                    color: Colors.black,
+                                    height: 1,
+                                  ),
+                                ),
+
+                                const SizedBox(height: 6),
+
+                                Text(
+                                  _getCurrentDate(),
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    color: Colors.black54,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+
+                                const SizedBox(height: 10),
+
+                                /// CLASS ID BOX
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 10, vertical: 6),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Text(
+                                    "Class ID: $classId",
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.bold),
+                                  ),
+                                ),
+
+                                const Spacer(),
+
+                                /// KEEP SPACE (IMPORTANT FOR ALIGNMENT)
+                                const SizedBox(height: 60),
+                              ],
+                            ),
+                          ),
+
+                          /// 👩‍🏫 IMAGE (EXACT POSITION LIKE STUDENT)
+                          Positioned(
+                            height: 280,
+                            right: -30,
+                            bottom: 0,
+                            child: Image.asset(
+                              'assets/images/teacherhome.png',
+                              height: size.height * 0.30,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
 
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 28),
 
-                  // 2. History Button
-                  OutlinedButton.icon(
-                    onPressed: () {
-                      Navigator.push(context, MaterialPageRoute(builder: (_) => const TeacherHistoryScreen()));
-                    },
-                    icon: const Icon(Icons.history, color: Colors.teal),
-                    label: const Text("View Sent Assignments", style: TextStyle(color: Colors.teal)),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
-                      side: const BorderSide(color: Colors.teal),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 20),
+                    child: Text(
+                      'Category',
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
 
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 14),
 
-                  // 3. Student List Button
-                  OutlinedButton.icon(
-                    onPressed: () {
-                      Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (_) => StudentListScreen(classId: data['class_id'] ?? 'class_6A')
-                          )
-                      );
-                    },
-                    icon: const Icon(Icons.people, color: Colors.teal),
-                    label: const Text("My Students & Progress", style: TextStyle(color: Colors.teal)),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
-                      side: const BorderSide(color: Colors.teal),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                  /// 🔥 GRID (MATCHED TO STUDENT)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+
+                        /// BIG TILE
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                    builder: (_) =>
+                                        const CreateAssignmentScreen()),
+                              );
+                            },
+                            child: Container(
+                              height: 304, // SAME AS STUDENT
+                              decoration: BoxDecoration(
+                                color: const Color.fromRGBO(190, 232, 181, 1),
+                                borderRadius: BorderRadius.circular(28),
+                              ),
+                              child: Stack(
+                                children: [
+                                  Center(
+                                    child: Transform.translate(
+                                      offset: const Offset(0, -40),
+                                      child: Image.asset(
+                                        'assets/images/createassignment.png',
+                                        height: 250,
+                                      ),
+                                    ),
+                                  ),
+                                  const Positioned(
+                                    bottom: 40,
+                                    left: 16,
+                                    child: Text(
+                                      'Create New\nAssignment',
+                                      style: TextStyle(
+                                        fontSize: 22,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  )
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+
+                        const SizedBox(width: 14),
+
+                        /// RIGHT SIDE
+                        Expanded(
+                          child: Column(
+                            children: [
+
+                              /// VIEW SENT
+                              GestureDetector(
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                        builder: (_) =>
+                                            const TeacherHistoryScreen()),
+                                  );
+                                },
+                                child: Container(
+                                  height: 170,
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFF3E5F5),
+                                    borderRadius: BorderRadius.circular(24),
+                                  ),
+                                  child: Stack(
+                                    clipBehavior: Clip.none,
+                                    children: [
+                                      Positioned(
+                                        top: -50,
+                                        left: 0,
+                                        right: 0,
+                                        child: Center(
+                                          child: Image.asset(
+                                            'assets/images/sendassignment.png',
+                                            height: 160,
+                                          ),
+                                        ),
+                                      ),
+                                      const Positioned(
+                                        bottom: 16,
+                                        left: 16,
+                                        right: 16,
+                                        child: Text(
+                                          'View Sent\nAssignments',
+                                          style: TextStyle(
+                                            fontSize: 18,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+
+                              const SizedBox(height: 14),
+
+                              /// STUDENTS
+                              GestureDetector(
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) =>
+                                          StudentListScreen(classId: classId),
+                                    ),
+                                  );
+                                },
+                                child: Container(
+                                  height: 120,
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFE1F5FE),
+                                    borderRadius: BorderRadius.circular(24),
+                                  ),
+                                  child: Stack(
+                                    clipBehavior: Clip.none,
+                                    children: [
+                                      Positioned(
+                                        bottom: -15,
+                                        right: 0,
+                                        child: Image.asset(
+                                          'assets/images/mystudents.png',
+                                          height: 110,
+                                        ),
+                                      ),
+                                      const Positioned(
+                                        top: 16,
+                                        left: 16,
+                                        child: Text(
+                                          'My Students',
+                                          style: TextStyle(
+                                            fontSize: 18,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],

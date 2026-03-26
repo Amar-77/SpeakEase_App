@@ -41,7 +41,7 @@ class AssignmentCard extends StatelessWidget {
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
              color: isDone
-      ? const Color.fromARGB(178, 107, 201, 108).withOpacity(0.92)
+      ? const Color.fromARGB(255, 107, 201, 109).withOpacity(0.92)
       : const Color(0xFFE0E0E0),
             borderRadius: BorderRadius.circular(20),
 
