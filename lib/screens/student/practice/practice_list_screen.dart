@@ -215,14 +215,14 @@ class _PracticeSessionListState extends State<PracticeSessionList>
             }
 
             final submittedIds = subSnapshot.data?.docs
-                .map((d) => (d.data()
-            as Map<String, dynamic>)['assignment_id']
-                .toString())
-                .toSet() ??
+                    .map((d) => (d.data()
+                        as Map<String, dynamic>)['assignment_id']
+                        .toString())
+                    .toSet() ??
                 {};
 
             final filteredDocs =
-            assignmentSnapshot.data!.docs.where((doc) {
+                assignmentSnapshot.data!.docs.where((doc) {
               bool isDone = submittedIds.contains(doc.id);
               return isCompletedPage ? isDone : !isDone;
             }).toList();

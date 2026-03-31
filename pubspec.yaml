@@ -19,7 +19,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 version: 1.0.0+1
 
 environment:
-  sdk: ^3.8.1
+  sdk: ^3.9.0
 
 # Dependencies specify other packages that your package needs in order to work.
 # To automatically upgrade your package dependencies to the latest versions
@@ -33,18 +33,21 @@ dependencies:
 
   firebase_core: ^4.3.0
   firebase_auth: ^6.1.3
+  flutter_native_splash: ^2.4.7
   cloud_firestore: ^6.1.1
   firebase_messaging: ^16.1.0
   intl: ^0.20.2
   http: ^1.6.0
-  file_picker: ^10.3.8
+  file_picker: ^10.3.10
   record: ^6.1.2
   path_provider: ^2.1.5
   permission_handler: ^12.0.1
-  audioplayers: ^5.2.1
-  
+  audioplayers: ^6.5.1
+  flutter_svg: ^2.2.4
   flutter_local_notifications: ^19.5.0
   uuid: ^4.3.3
+  google_fonts: ^8.0.2
+  video_player: ^2.11.1
   
 
   # The following adds the Cupertino Icons font to your application.
@@ -55,6 +58,9 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
+flutter_native_splash:
+  color: "#FDE4BA"
+  image: ~
 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is
@@ -77,6 +83,9 @@ flutter:
   # To add assets to your application, add an assets section, like this:
   assets:
      - assets/images/
+     - assets/images/
+     - assets/icons/
+     - assets/videos/
      - .env
 
   # An image asset can refer to one or more resolution-specific "variants", see

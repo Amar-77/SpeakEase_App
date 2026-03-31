@@ -3,7 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:speakease/screens/student/practice/widgets/detailed_result_view.dart';
 
-class StudentAnalysisScreen extends StatelessWidget {
+class StudentAnalysisScreen extends StatefulWidget {
   final String studentId;
   final String studentName;
   final String classId;
@@ -16,42 +16,239 @@ class StudentAnalysisScreen extends StatelessWidget {
   });
 
   @override
+  State<StudentAnalysisScreen> createState() =>
+      _StudentAnalysisScreenState();
+}
+
+class _StudentAnalysisScreenState extends State<StudentAnalysisScreen> {
+  final PageController _pageController = PageController();
+  bool isShowingCompleted = false;
+
+  @override
   Widget build(BuildContext context) {
-    final String currentTeacherId = FirebaseAuth.instance.currentUser!.uid;
+    final String currentTeacherId =
+        FirebaseAuth.instance.currentUser!.uid;
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text("$studentName's Progress"),
-        backgroundColor: Colors.teal,
-      ),
-      body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance
-            .collection('assignments')
-            .where('class_id', isEqualTo: classId)
-            .orderBy('created_at', descending: true)
-            .snapshots(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
-          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) return const Center(child: Text("No assignments found."));
+      backgroundColor: Colors.white,
 
-          return ListView.builder(
-            padding: const EdgeInsets.all(15),
-            itemCount: snapshot.data!.docs.length,
-            itemBuilder: (context, index) {
-              var assignmentDoc = snapshot.data!.docs[index];
-              return _AssignmentAnalysisCard(
-                assignmentDoc: assignmentDoc,
-                studentId: studentId,
-                currentTeacherId: currentTeacherId,
-              );
-            },
-          );
-        },
+      /// APP BAR
+      appBar: AppBar(
+        title: Text("${widget.studentName}'s Progress"),
+        backgroundColor: Colors.white,
+        elevation: 0,
+        iconTheme: const IconThemeData(color: Colors.black),
       ),
+
+      body: Column(
+        children: [
+
+          /// 🔥 TOGGLE
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Container(
+              width: 260,
+              height: 50,
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: Colors.black,
+                borderRadius: BorderRadius.circular(30),
+              ),
+              child: Stack(
+                children: [
+
+                  /// SLIDING INDICATOR
+                  AnimatedAlign(
+                    duration: const Duration(milliseconds: 250),
+                    curve: Curves.easeInOut,
+                    alignment: isShowingCompleted
+                        ? Alignment.centerRight
+                        : Alignment.centerLeft,
+                    child: Container(
+                      width: 120,
+                      decoration: BoxDecoration(
+                        color: isShowingCompleted
+                            ? Colors.green
+                            : Colors.white,
+                        borderRadius: BorderRadius.circular(25),
+                      ),
+                    ),
+                  ),
+
+                  /// LABELS
+                  Row(
+                    children: [
+
+                      /// PENDING
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () {
+                            _pageController.animateToPage(
+                              0,
+                              duration:
+                                  const Duration(milliseconds: 300),
+                              curve: Curves.easeInOut,
+                            );
+                          },
+                          child: Center(
+                            child: Text(
+                              "Pending",
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: isShowingCompleted
+                                    ? Colors.white70
+                                    : Colors.black,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+
+                      /// COMPLETED
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () {
+                            _pageController.animateToPage(
+                              1,
+                              duration:
+                                  const Duration(milliseconds: 300),
+                              curve: Curves.easeInOut,
+                            );
+                          },
+                          child: Center(
+                            child: Text(
+                              "Completed",
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: isShowingCompleted
+                                    ? Colors.white
+                                    : Colors.white70,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          /// 🔥 PAGEVIEW
+          Expanded(
+            child: PageView(
+              controller: _pageController,
+              onPageChanged: (index) {
+                setState(() {
+                  isShowingCompleted = index == 1;
+                });
+              },
+              children: [
+
+                /// 🔴 PENDING
+                _buildAssignmentList(
+                  isCompletedPage: false,
+                  currentTeacherId: currentTeacherId,
+                ),
+
+                /// 🟢 COMPLETED
+                _buildAssignmentList(
+                  isCompletedPage: true,
+                  currentTeacherId: currentTeacherId,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 🔥 LIST BUILDER
+  Widget _buildAssignmentList({
+    required bool isCompletedPage,
+    required String currentTeacherId,
+  }) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('assignments')
+          .where('class_id', isEqualTo: widget.classId)
+          .orderBy('created_at', descending: true)
+          .snapshots(),
+      builder: (context, snapshot) {
+
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return const Center(child: Text("No assignments found."));
+        }
+
+        return ListView.builder(
+          padding: const EdgeInsets.all(15),
+          itemCount: snapshot.data!.docs.length,
+          itemBuilder: (context, index) {
+
+            var assignmentDoc = snapshot.data!.docs[index];
+
+            return _FilteredAssignmentCard(
+              assignmentDoc: assignmentDoc,
+              studentId: widget.studentId,
+              currentTeacherId: currentTeacherId,
+              showCompleted: isCompletedPage,
+            );
+          },
+        );
+      },
     );
   }
 }
 
+/// 🔥 FILTER WRAPPER
+class _FilteredAssignmentCard extends StatelessWidget {
+  final DocumentSnapshot assignmentDoc;
+  final String studentId;
+  final String currentTeacherId;
+  final bool showCompleted;
+
+  const _FilteredAssignmentCard({
+    required this.assignmentDoc,
+    required this.studentId,
+    required this.currentTeacherId,
+    required this.showCompleted,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('submissions')
+          .where('assignment_id', isEqualTo: assignmentDoc.id)
+          .where('student_id', isEqualTo: studentId)
+          .limit(1)
+          .snapshots(),
+      builder: (context, snapshot) {
+
+        bool isDone =
+            snapshot.hasData && snapshot.data!.docs.isNotEmpty;
+
+        if (showCompleted != isDone) {
+          return const SizedBox.shrink();
+        }
+
+        return _AssignmentAnalysisCard(
+          assignmentDoc: assignmentDoc,
+          studentId: studentId,
+          currentTeacherId: currentTeacherId,
+        );
+      },
+    );
+  }
+}
+
+/// 🔥 CARD (UI ONLY UPDATED)
 class _AssignmentAnalysisCard extends StatelessWidget {
   final DocumentSnapshot assignmentDoc;
   final String studentId;
@@ -67,10 +264,7 @@ class _AssignmentAnalysisCard extends StatelessWidget {
   Widget build(BuildContext context) {
     var data = assignmentDoc.data() as Map<String, dynamic>;
     String title = data['title'] ?? 'Untitled';
-    String creatorId = data['teacher_id'] ?? '';
-    bool isCreatedByMe = (creatorId == currentTeacherId);
 
-    // Fetch the specific submission for THIS student & THIS assignment
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection('submissions')
@@ -80,77 +274,102 @@ class _AssignmentAnalysisCard extends StatelessWidget {
           .snapshots(),
       builder: (context, snapshot) {
 
-        bool isDone = snapshot.hasData && snapshot.data!.docs.isNotEmpty;
+        bool isDone =
+            snapshot.hasData && snapshot.data!.docs.isNotEmpty;
+
         Map<String, dynamic>? subData;
         int score = 0;
 
         if (isDone) {
-          subData = snapshot.data!.docs.first.data() as Map<String, dynamic>;
+          subData =
+              snapshot.data!.docs.first.data() as Map<String, dynamic>;
           score = subData['accuracy_score'] ?? 0;
         }
 
         return Card(
           margin: const EdgeInsets.only(bottom: 15),
-          elevation: isDone ? 2 : 1,
-          color: isDone ? Colors.white : Colors.grey.shade50,
           shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-              side: isDone ? BorderSide(color: Colors.teal.withOpacity(0.3)) : BorderSide.none
-          ),
+              borderRadius: BorderRadius.circular(16)),
+          elevation: 2,
           child: Padding(
-            padding: const EdgeInsets.all(15.0),
+            padding: const EdgeInsets.all(15),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // 1. Header Row (Title + Status)
+
+                /// TITLE + CONTENT
                 Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Expanded(
                       child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                        crossAxisAlignment:
+                            CrossAxisAlignment.start,
                         children: [
-                          Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                          const SizedBox(height: 4),
-                          // "Assigned by" logic
-                          isCreatedByMe
-                              ? const Text("Assigned by: You", style: TextStyle(color: Colors.teal, fontWeight: FontWeight.bold, fontSize: 12))
-                              : _TeacherNameWidget(teacherId: creatorId),
+
+                          Text(
+                            title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16),
+                          ),
+
+                          const SizedBox(height: 6),
+
+                          Text(
+                            data['content'] ?? '',
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.grey,
+                              fontSize: 13,
+                            ),
+                          ),
                         ],
                       ),
                     ),
+
                     if (isDone)
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                        decoration: BoxDecoration(color: Colors.green.shade100, borderRadius: BorderRadius.circular(10)),
-                        child: Text("Score: $score%", style: TextStyle(color: Colors.green.shade800, fontWeight: FontWeight.bold, fontSize: 12)),
-                      )
+                      Text("Score: $score%")
                     else
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                        decoration: BoxDecoration(color: Colors.red.shade100, borderRadius: BorderRadius.circular(10)),
-                        child: Text("Pending", style: TextStyle(color: Colors.red.shade800, fontWeight: FontWeight.bold, fontSize: 12)),
-                      ),
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+    decoration: BoxDecoration(
+      color: Colors.red.shade100, // light red bg
+      borderRadius: BorderRadius.circular(10),
+    ),
+    child: Text(
+      "Pending",
+      style: TextStyle(
+        color: Colors.red.shade800,
+        fontWeight: FontWeight.bold,
+        fontSize: 12,
+      ),
+    ),
+  ),
                   ],
                 ),
 
-                const SizedBox(height: 15),
+                const SizedBox(height: 10),
 
-                // 2. Action Area
+                /// 🔥 ORIGINAL BUTTON (UNCHANGED)
                 if (isDone)
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      icon: const Icon(Icons.analytics_outlined),
-                      label: const Text("View Detailed Analysis"),
-                      style: OutlinedButton.styleFrom(foregroundColor: Colors.teal),
-                      onPressed: () => _showDetailedReport(context, subData!),
+                  OutlinedButton.icon(
+                    icon: const Icon(Icons.analytics_outlined),
+                    label: const Text("View Detailed Analysis"),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.teal,
                     ),
+                    onPressed: () => _showDetailedReport(context, subData!),
                   )
                 else
                   const Text(
                     "Student has not completed this task yet.",
-                    style: TextStyle(fontStyle: FontStyle.italic, color: Colors.grey, fontSize: 12),
+                    style: TextStyle(
+                        fontStyle: FontStyle.italic,
+                        color: Colors.grey,
+                        fontSize: 12),
                   ),
               ],
             ),
@@ -160,7 +379,7 @@ class _AssignmentAnalysisCard extends StatelessWidget {
     );
   }
 
-  // Opens the exact same report view the student sees
+  /// 🔥 ORIGINAL REPORT FUNCTION (UNCHANGED)
   void _showDetailedReport(BuildContext context, Map<String, dynamic> data) {
     showModalBottomSheet(
       context: context,
@@ -172,19 +391,26 @@ class _AssignmentAnalysisCard extends StatelessWidget {
         child: SingleChildScrollView(
           child: Column(
             children: [
-              Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                const Text("Student Report", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-                IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context))
-              ]),
+              Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text("Student Report",
+                        style: TextStyle(
+                            fontSize: 22, fontWeight: FontWeight.bold)),
+                    IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.pop(context))
+                  ]),
               const Divider(),
 
-              // REUSE THE WIDGET FROM STUDENT SIDE
               DetailedResultView(
                 overallScore: (data['accuracy_score'] ?? 0).toDouble(),
                 fluency: (data['fluency_score'] ?? 0).toDouble(),
-                pronunciation: (data['pronunciation_score'] ?? 0).toDouble(),
+                pronunciation:
+                    (data['pronunciation_score'] ?? 0).toDouble(),
                 clarity: (data['clarity_score'] ?? 0).toDouble(),
-                accuracy: (data['transcription_accuracy'] ?? 0).toDouble(),
+                accuracy:
+                    (data['transcription_accuracy'] ?? 0).toDouble(),
                 wpm: (data['wpm'] ?? 0).toDouble(),
                 ageGroup: data['detected_age'] ?? "Unknown",
                 wordAnalysis: data['word_analysis'] ?? [],
@@ -194,24 +420,6 @@ class _AssignmentAnalysisCard extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-}
-
-// Keep your existing TeacherNameWidget helper
-class _TeacherNameWidget extends StatelessWidget {
-  final String teacherId;
-  const _TeacherNameWidget({required this.teacherId});
-
-  @override
-  Widget build(BuildContext context) {
-    return FutureBuilder<DocumentSnapshot>(
-      future: FirebaseFirestore.instance.collection('users').doc(teacherId).get(),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) return const Text("...", style: TextStyle(fontSize: 12, color: Colors.grey));
-        var data = snapshot.data!.data() as Map<String, dynamic>?;
-        return Text("Assigned by: ${data?['name'] ?? 'Unknown'}", style: const TextStyle(color: Colors.grey, fontStyle: FontStyle.italic, fontSize: 12));
-      },
     );
   }
 }

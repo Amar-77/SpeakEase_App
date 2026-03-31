@@ -65,6 +65,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:speakease/screens/auth/auth_gate.dart';
 import 'package:speakease/screens/auth/login_screen.dart';
+import 'package:speakease/splash_screen.dart';
 import 'package:speakease/screens/student/home/student_home.dart';
 import 'package:speakease/screens/teacher/home/teacher_home.dart';
 
@@ -151,7 +152,7 @@ void main() async {
 
   runApp(const MaterialApp(
     debugShowCheckedModeBanner: false,
-    home: AuthGate(),
+    home: SplashScreen(),
   ));
 }
 
