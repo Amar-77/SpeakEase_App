@@ -58,6 +58,16 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  flutter_launcher_icons: ^0.14.4
+
+flutter_icons:
+  android: true
+  ios: true
+  image_path: "assets/images/speaky.png"
+
+  adaptive_icon_background: "assets/images/speaky_background.png"
+  adaptive_icon_foreground: "assets/images/speaky_foreground.png"
+
 flutter_native_splash:
   color: "#FDE4BA"
   image: ~
