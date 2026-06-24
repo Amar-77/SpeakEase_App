@@ -51,4 +51,22 @@ In `lib/config/` (or wherever your API base URL is set), update:
 const String BASE_URL = "https://amarre-speakease-models.hf.space";
 ```
 
-## 📱 App Structure
+## 📸 Screenshots
+
+### 🏠 Student Dashboard
+![Dashboard](assets/images/1.png)
+
+### 📝 Assignments & Weekly Analytics
+![Assignments](assets/images/2.png)
+
+### 🎤 Practice Session
+![Practice](assets/images/3.png)
+
+### 📊 Results Card & Word Feedback
+![Results](assets/images/4.png)
+
+### 🤖 Speaky – Conversational AI Tutor
+![Speaky](assets/images/5.png)
+
+### 🏆 Mastery Hub
+![Mastery](assets/images/6.png)
