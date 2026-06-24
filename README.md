@@ -6,7 +6,7 @@ and an interactive AI tutor.
 
 ## 🔗 Related Repositories
 - **Backend (Local Dev):** [SpeakEase_2.0](https://github.com/Amar-77/SpeakEase_2.0)
-- **Production Backend + Models:** [Hugging Face Space](https://huggingface.co/spaces/amarre/speakease-models)
+- **Production Backend + Models:** [Hugging Face Space](https://huggingface.co/amarre)
 
 ## ✨ Features
 - 🎤 Real-time speech recording and transcription
