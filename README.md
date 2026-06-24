@@ -53,10 +53,20 @@ const String BASE_URL = "https://amarre-speakease-models.hf.space";
 
 ## 📸 Screenshots
 
-| Dashboard | Assignments | Practice |
-|-----------|-------------|----------|
-| <img src="assets/images/1.png" width="500"/> | <img src="assets/images/2.png" width="500"/> | <img src="assets/images/3.png" width="500"/> |
+### 🏠 Student Dashboard
+<img src="assets/images/1.png" width="500"/>
 
-| Results | Speaky | Mastery Hub |
-|---------|--------|-------------|
-| <img src="assets/images/4.png" width="500"/> | <img src="assets/images/5.png" width="500"/> | <img src="assets/images/6.png" width="500"/> |
+### 📝 Assignments & Weekly Analytics
+<img src="assets/images/2.png" width="500"/>
+
+### 🎤 Practice Session
+<img src="assets/images/3.png" width="500"/>
+
+### 📊 Results Card & Word Feedback
+<img src="assets/images/4.png" width="500"/>
+
+### 🤖 Speaky – Conversational AI Tutor
+<img src="assets/images/5.png" width="500"/>
+
+### 🏆 Mastery Hub
+<img src="assets/images/6.png" width="500"/>
