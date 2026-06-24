@@ -55,8 +55,8 @@ const String BASE_URL = "https://amarre-speakease-models.hf.space";
 
 | Dashboard | Assignments | Practice |
 |-----------|-------------|----------|
-| <img src="assets/images/1.png" width="200"/> | <img src="assets/images/2.png" width="200"/> | <img src="assets/images/3.png" width="200"/> |
+| <img src="assets/images/1.png" width="500"/> | <img src="assets/images/2.png" width="500"/> | <img src="assets/images/3.png" width="500"/> |
 
 | Results | Speaky | Mastery Hub |
 |---------|--------|-------------|
-| <img src="assets/images/4.png" width="200"/> | <img src="assets/images/5.png" width="200"/> | <img src="assets/images/6.png" width="200"/> |
+| <img src="assets/images/4.png" width="500"/> | <img src="assets/images/5.png" width="500"/> | <img src="assets/images/6.png" width="500"/> |
